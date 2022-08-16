@@ -68,9 +68,9 @@ func (c *Compiler) Compile(content string) (*Compiled, error) {
 }
 
 // ExtractRoot remove o node do Root atual e retorna um novo Root para os filhos do node atual
-func (c *Compiler) ExtractRoot(node *html.Node) *html.Node {
+func (c *Compiler) ExtractRoot(node *Node) *Node {
 
-	parent := &html.Node{Type: html.DocumentNode}
+	parent := &Node{Type: DocumentNode}
 
 	parent.FirstChild = node.FirstChild
 	parent.LastChild = node.LastChild
@@ -87,10 +87,10 @@ func (c *Compiler) ExtractRoot(node *html.Node) *html.Node {
 }
 
 // SafeRemove remove o node de forma segura
-func (c *Compiler) SafeRemove(node *html.Node) {
-	node.Type = html.TextNode
+func (c *Compiler) SafeRemove(node *Node) {
+	node.Type = TextNode
 	node.Data = ""
-	node.Attr = []html.Attribute{}
+	node.Attr = []Attribute{}
 	if node.FirstChild != nil {
 		node.FirstChild.Parent = nil
 		node.FirstChild = nil
@@ -118,29 +118,50 @@ func (c *Compiler) GetFilepath() string {
 	return c.filepath
 }
 
-func (c *Compiler) compileNode(node *html.Node, context *CompileContext) (*Compiled, error) {
-	return c.compile([]*html.Node{node}, context)
+// Transverse run callback for node and all its children, until callback returns true
+func (c *Compiler) Transverse(node *Node, callback func(node *Node) (stop bool)) {
+	var f func(*Node)
+	f = func(n *Node) {
+		if callback(n) {
+			return
+		}
+		for d := n.FirstChild; d != nil; d = d.NextSibling {
+			f(d)
+		}
+	}
+	f(node)
+}
+
+func (c *Compiler) compileNode(node *Node, context *CompileContext) (*Compiled, error) {
+	return c.compile([]*Node{node}, context)
 }
 
 // compile compile internal
-func (c *Compiler) compile(nodeList []*html.Node, context *CompileContext) (*Compiled, error) {
-	c.processNodes(nodeList, context)
+func (c *Compiler) compile(nodeList []*Node, context *CompileContext) (*Compiled, error) {
+	err := c.processNodes(nodeList, context)
+	if err != nil {
+		return nil, err
+	}
 	compiled := c.extractCompiled(nodeList)
 	return compiled, nil
 }
 
-// faz a compilação de todos os html.Node da lista
-func (c *Compiler) processNodes(nodeList []*html.Node, prevContext *CompileContext) {
+// faz a compilação de todos os Node da lista
+func (c *Compiler) processNodes(nodeList []*Node, prevContext *CompileContext) error {
 	for _, node := range nodeList {
-		if node.Type == html.ElementNode {
+		if node.Type == ElementNode {
 			attrs := AttributesFromHtmlNode(node)
 
+			var err error
 			var dynamic *DynamicDirectives
 
 			// get the directives that can be applied on that node
 			directives := c.Directives.collect(node, attrs)
 			if len(directives) > 0 {
-				dynamic = c.compileDirectives(directives, node, attrs, prevContext)
+				dynamic, err = c.compileDirectives(directives, node, attrs, prevContext)
+				if err != nil {
+					return err
+				}
 			}
 
 			if dynamic != nil && dynamic.transclude {
@@ -150,22 +171,26 @@ func (c *Compiler) processNodes(nodeList []*html.Node, prevContext *CompileConte
 				if dynamic != nil {
 					// replace attributes
 					_, token := c.addDynamic(dynamic)
-					node.Attr = []html.Attribute{{Key: token}}
+					node.Attr = []Attribute{{Name: token}}
 				}
 
 				childNodes := getChildNodes(node)
 				if childNodes != nil || len(childNodes) > 0 {
-					c.processNodes(childNodes, prevContext)
+					err = c.processNodes(childNodes, prevContext)
+					if err != nil {
+						return err
+					}
 				}
 			}
-		} else if node.Type == html.TextNode {
+		} else if node.Type == TextNode {
 			c.compileTextNode(node)
 		}
 	}
+	return nil
 }
 
 // compileTextNode verifica se um node do tipo html.TextNode possui conteúdo dinamico e faz sua compilação
-func (c *Compiler) compileTextNode(node *html.Node) {
+func (c *Compiler) compileTextNode(node *Node) {
 	text := node.Data
 	compiled, err := Interpolate(text)
 	if err != nil {
@@ -190,11 +215,11 @@ func (c *Compiler) compileTextNode(node *html.Node) {
 	node.Data = out.String()
 }
 
-// faz a renderização do html.Node e transforma-o em um Compiled
-func (c *Compiler) extractCompiled(nodeList []*html.Node) *Compiled {
+// faz a renderização do Node e transforma-o em um Compiled
+func (c *Compiler) extractCompiled(nodeList []*Node) *Compiled {
 
 	prev := nodeList[0]
-	doc := &html.Node{Type: html.DocumentNode, FirstChild: prev}
+	doc := &Node{Type: DocumentNode, FirstChild: prev}
 	for _, node := range nodeList {
 		node.Parent = doc
 		if prev != node {
@@ -205,7 +230,7 @@ func (c *Compiler) extractCompiled(nodeList []*html.Node) *Compiled {
 
 	bufferString := bytes.NewBufferString("")
 
-	err := html.Render(bufferString, doc)
+	err := html.Render(bufferString, doc.toHtmlNode())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -240,7 +265,7 @@ func (c *Compiler) extractCompiled(nodeList []*html.Node) *Compiled {
 	return compiled
 }
 
-//func assertNoDuplicate(what string, previousDirective *Directive, directive *Directive, element *html.Node) {
+//func assertNoDuplicate(what string, previousDirective *Directive, directive *Directive, element *Node) {
 //	if previousDirective != nil {
 //		log.Fatal("Multiple directives [{0}, {1}] asking for {3} on: {5}")
 //		// previousDirective.Name, directive.name, what, startingTag(element)
@@ -251,8 +276,8 @@ func (c *Compiler) extractCompiled(nodeList []*html.Node) *Compiled {
 // is responsible for inlining directive templates as well as terminating the application
 // of the directives if the terminal directive has been reached.
 func (c *Compiler) compileDirectives(
-	directives []*Directive, node *html.Node, attrs *Attributes, prevContext *CompileContext,
-) *DynamicDirectives {
+	directives []*Directive, node *Node, attrs *Attributes, prevContext *CompileContext,
+) (*DynamicDirectives, error) {
 
 	terminalPriority := math.MinInt
 
@@ -261,7 +286,7 @@ func (c *Compiler) compileDirectives(
 	}
 
 	tag := ""
-	if node.Type == html.ElementNode {
+	if node.Type == ElementNode {
 		tag = node.Data
 	}
 
@@ -286,7 +311,10 @@ func (c *Compiler) compileDirectives(
 		transclude := directive.Transclude
 
 		if directive.Compile != nil {
-			methods := directive.Compile(node, attrs, c)
+			methods, err := directive.Compile(node, attrs, c)
+			if err != nil {
+				return nil, err
+			}
 			if methods != nil {
 				if methods.Process != nil {
 					processFunc = methods.Process
@@ -371,7 +399,7 @@ func (c *Compiler) compileDirectives(
 	dynamic.leave = leaveInfos
 	dynamic.process = processInfos
 
-	return dynamic
+	return dynamic, nil
 }
 
 // addDynamic adiciona um dynamic no contexto de compilação e retorna seu índice e identificador
@@ -382,11 +410,11 @@ func (c *Compiler) addDynamic(dynamic Dynamic) (int, string) {
 }
 
 // replaceNodeByDynamic substitui um node html por um comando dinamico executável
-func (c *Compiler) replaceNodeByDynamic(node *html.Node, dynamic Dynamic) {
+func (c *Compiler) replaceNodeByDynamic(node *Node, dynamic Dynamic) {
 	_, token := c.addDynamic(dynamic)
 
 	// B) substitui o node por um comentário, que será processado no próximo passo
-	node.Type = html.TextNode
+	node.Type = TextNode
 	node.Data = " " + token // extra space, see syntaxDynamicIndexRegex
 
 	// deixa todos os filhos órfãos, para não serem renderizados
@@ -399,8 +427,8 @@ func (c *Compiler) replaceNodeByDynamic(node *html.Node, dynamic Dynamic) {
 	node.LastChild = nil
 }
 
-func getChildNodes(node *html.Node) []*html.Node {
-	var childNodes []*html.Node
+func getChildNodes(node *Node) []*Node {
+	var childNodes []*Node
 	for child := node.FirstChild; child != nil; child = child.NextSibling {
 		childNodes = append(childNodes, child)
 	}

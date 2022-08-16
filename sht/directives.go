@@ -1,7 +1,6 @@
 package sht
 
 import (
-	"golang.org/x/net/html"
 	"log"
 	"sort"
 )
@@ -64,7 +63,7 @@ func (d *Directives) NewChild() *Directives {
 }
 
 // collect Looks for directives on the given node and adds them to the directive collection which is sorted.
-func (d *Directives) collect(node *html.Node, attrs *Attributes) []*Directive {
+func (d *Directives) collect(node *Node, attrs *Attributes) []*Directive {
 
 	ddMap := map[*Directive]bool{}
 

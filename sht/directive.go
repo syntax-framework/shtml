@@ -1,7 +1,6 @@
 package sht
 
 import (
-	"golang.org/x/net/html"
 	"io/fs"
 	"strings"
 )
@@ -22,7 +21,7 @@ type DirectiveProcessFunc func(scope *Scope, attr *Attributes, transclude Transc
 type DirectiveLeaveFunc func(scope *Scope)
 
 // DirectiveCompileFunc uma funcão que visita um elemento html e pode realizar ajustes no template em tempo de compilação
-type DirectiveCompileFunc func(node *html.Node, attrs *Attributes, c *Compiler) *DirectiveMethods
+type DirectiveCompileFunc func(node *Node, attrs *Attributes, c *Compiler) (*DirectiveMethods, error)
 
 type DirectiveProcessInfo struct {
 	name       string
@@ -96,7 +95,7 @@ func (d *Directive) Normalize() {
 	}
 }
 
-// DynamicDirectives parte dinamica que executa as diretivas de um html.Node
+// DynamicDirectives parte dinamica que executa as diretivas de um Node
 type DynamicDirectives struct {
 	tag        string
 	attrs      *Attributes // template attrs

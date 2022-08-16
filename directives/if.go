@@ -2,7 +2,6 @@ package directives
 
 import (
 	"github.com/syntax-framework/shtml/sht"
-	"golang.org/x/net/html"
 	"log"
 	"strings"
 )
@@ -61,16 +60,16 @@ func attrIF(attrs *sht.Attributes) string {
 	return attrs.Get("if")
 }
 
-// DirectiveIFElement `<if cond="true"/>`
+// IFElement `<if cond="true"/>`
 // @TODO `<if cond="true"></if> <else-if cond="true"></else-if> <else></else>`
-var DirectiveIFElement = &sht.Directive{
+var IFElement = &sht.Directive{
 	Name:       "if",
 	Restrict:   sht.ELEMENT,
 	Priority:   600,
 	Terminal:   true,
 	Transclude: true,
-	Compile: func(node *html.Node, attrs *sht.Attributes, t *sht.Compiler) *sht.DirectiveMethods {
-		return createIfDirective(attrs, attrCOND)
+	Compile: func(node *sht.Node, attrs *sht.Attributes, t *sht.Compiler) (*sht.DirectiveMethods, error) {
+		return createIfDirective(attrs, attrCOND), nil
 
 		//conditions := &_CommandConditions{BreakOnFirstValid: true}
 		//
@@ -110,14 +109,14 @@ var DirectiveIFElement = &sht.Directive{
 	},
 }
 
-// DirectiveIFAttribute `<element if="true"/>`
-var DirectiveIFAttribute = &sht.Directive{
+// IFAttribute `<element if="true"/>`
+var IFAttribute = &sht.Directive{
 	Name:       "if",
 	Restrict:   sht.ATTRIBUTE,
 	Priority:   599,
 	Terminal:   true,
 	Transclude: "element",
-	Compile: func(node *html.Node, attrs *sht.Attributes, t *sht.Compiler) *sht.DirectiveMethods {
-		return createIfDirective(attrs, attrIF)
+	Compile: func(node *sht.Node, attrs *sht.Attributes, t *sht.Compiler) (*sht.DirectiveMethods, error) {
+		return createIfDirective(attrs, attrIF), nil
 	},
 }

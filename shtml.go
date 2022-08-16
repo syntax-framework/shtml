@@ -24,6 +24,6 @@ func New(loader func(filepath string) (string, error)) TemplateSystem {
 }
 
 func init() {
-	Register(directives.DirectiveIFElement)
-	Register(directives.DirectiveIFAttribute)
+	Register(directives.IFElement)
+	Register(directives.IFAttribute)
 }

@@ -2,7 +2,6 @@ package sht
 
 import (
 	"bytes"
-	"golang.org/x/net/html"
 	"strings"
 )
 
@@ -11,8 +10,7 @@ type Attribute struct {
 	Name      string
 	Value     string
 	Namespace string
-	file      string
-	line      int
+
 	// nodeName string
 }
 
@@ -33,18 +31,18 @@ func NewAttribute(name string, value string, namespace string) *Attribute {
 	}
 }
 
-func AttributesFromHtmlNode(node *html.Node) *Attributes {
+func AttributesFromHtmlNode(node *Node) *Attributes {
 	attrs := &Attributes{
 		DirectiveMap: map[string]string{},
 		Attrs:        map[string]*Attribute{},
 	}
 
 	for _, nodeAttr := range node.Attr {
-		attr := NewAttribute(nodeAttr.Key, nodeAttr.Val, nodeAttr.Namespace)
+		attr := NewAttribute(nodeAttr.Name, nodeAttr.Value, nodeAttr.Namespace)
 		if attr.Name == "" {
 			continue
 		}
-		attrs.DirectiveMap[attr.Name] = nodeAttr.Key
+		attrs.DirectiveMap[attr.Name] = nodeAttr.Name
 		attrs.Attrs[attr.Name] = attr
 	}
 

@@ -2,7 +2,6 @@ package directives
 
 import (
 	"github.com/syntax-framework/shtml/sht"
-	"golang.org/x/net/html"
 	"log"
 	"path"
 	"strings"
@@ -11,7 +10,7 @@ import (
 const keyIncludeParents = "linkIncludes"
 
 // LinkDirectiveFunc faz o processamento de <link rel="include" href="file.html"/>
-var LinkDirectiveFunc = func(node *html.Node, attrs *sht.Attributes, c *sht.Compiler) {
+var LinkDirectiveFunc = func(node *sht.Node, attrs *sht.Attributes, c *sht.Compiler) {
 	relAttr := attrs.Get("rel")
 	if relAttr != "include" {
 		return

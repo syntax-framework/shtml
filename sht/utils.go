@@ -2,7 +2,7 @@ package sht
 
 import (
 	"bytes"
-	"golang.org/x/net/html"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -137,7 +137,7 @@ func NormalizeName(name string) string {
 }
 
 // Returns the string representation of the element.
-func startingTag(node *html.Node) {
+func startingTag(node *Node) {
 	//element = jqLite(element).clone().empty()
 	//var elemHtml = jqLite('<div></div>').append(element).html()
 	//try{
@@ -152,9 +152,17 @@ func startingTag(node *html.Node) {
 	//}
 }
 
-func minErr(module string) func(code string, template string, params ...interface{}) {
-	return func(code string, template string, params ...interface{}) {
+type ErrorFunc func(params ...interface{}) error
 
+func ErrorTemplate(code string, template ...string) ErrorFunc {
+	format := "[" + code + "] " + template[0]
+
+	for i := 1; i < len(template); i++ {
+		format = format + "\n    " + template[i]
+	}
+
+	return func(params ...interface{}) error {
+		return fmt.Errorf(format, params...)
 	}
 }
 

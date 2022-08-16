@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func unindented(template string) string {
+func TestUnindentedTemplate(template string) string {
 	if strings.HasPrefix(template, "\n    ") {
 		template = strings.ReplaceAll(template, "\n    ", "\n")
 	}
@@ -15,7 +15,7 @@ func unindented(template string) string {
 
 // TestCompile compiles a template and already tests the expected output
 func TestCompile(t *testing.T, template string, static []string, globalDirectives *Directives) *Compiled {
-	template = unindented(template)
+	template = TestUnindentedTemplate(template)
 	compiler := NewCompiler(&TemplateSystem{Directives: globalDirectives.NewChild()})
 	compiled, err := compiler.Compile(template)
 	if err != nil {
@@ -32,7 +32,7 @@ func TestCompile(t *testing.T, template string, static []string, globalDirective
 
 // TestRender renders a compiled and already tests the expected result
 func TestRender(t *testing.T, compiled *Compiled, values map[string]interface{}, expected string) {
-	expected = unindented(expected)
+	expected = TestUnindentedTemplate(expected)
 
 	scope := NewRootScope()
 	if values != nil {
@@ -56,7 +56,7 @@ func TestTemplate(
 	expected string,
 	globalDirectives *Directives,
 ) {
-	template = unindented(template)
+	template = TestUnindentedTemplate(template)
 	compiler := NewCompiler(&TemplateSystem{Directives: globalDirectives.NewChild()})
 	compiled, err := compiler.Compile(template)
 	if err != nil {

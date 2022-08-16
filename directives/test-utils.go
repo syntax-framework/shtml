@@ -6,6 +6,7 @@ import "github.com/syntax-framework/shtml/sht"
 var testGDs = &sht.Directives{}
 
 func init() {
-	testGDs.Add(DirectiveIFElement)
-	testGDs.Add(DirectiveIFAttribute)
+	testGDs.Add(IFElement)
+	testGDs.Add(IFAttribute)
+	testGDs.Add(Component)
 }
