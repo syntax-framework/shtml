@@ -2,7 +2,6 @@ package sht
 
 import (
 	"bytes"
-	"golang.org/x/net/html"
 	"log"
 	"math"
 	"regexp"
@@ -59,15 +58,15 @@ func (c *Compiler) Set(key string, value interface{}) {
 	c.data[key] = value
 }
 
-func (c *Compiler) Compile(content string) (*Compiled, error) {
-	nodeList, err := ParseHtml(content)
+func (c *Compiler) Compile(template string, filepath string) (*Compiled, error) {
+	nodeList, err := Parse(template, filepath)
 	if err != nil {
 		return nil, err
 	}
 	return c.compile(nodeList, nil)
 }
 
-// ExtractRoot remove o node do Root atual e retorna um novo Root para os filhos do node atual
+// ExtractRoot remove o node do root atual e retorna um novo root para os filhos do node atual
 func (c *Compiler) ExtractRoot(node *Node) *Node {
 
 	parent := &Node{Type: DocumentNode}
@@ -90,7 +89,7 @@ func (c *Compiler) ExtractRoot(node *Node) *Node {
 func (c *Compiler) SafeRemove(node *Node) {
 	node.Type = TextNode
 	node.Data = ""
-	node.Attr = []Attribute{}
+	node.AttrList = []*Attribute{}
 	if node.FirstChild != nil {
 		node.FirstChild.Parent = nil
 		node.FirstChild = nil
@@ -105,7 +104,7 @@ func (c *Compiler) SafeRemove(node *Node) {
 func (c *Compiler) RaiseFileError(msg string, filePath string) {
 	//var linha = (template.substr(0, RegexMatch.index).split('\n').length);
 	//panic(msg + ' < arquivo: "' + filePath + '", linha: ' + linha + ' >');
-	panic(msg + " <file: '" + filePath + "'" + ">")
+	panic(msg + " <File: '" + filePath + "'" + ">")
 }
 
 // SetFilepath define qual arquivo está sendo processado
@@ -150,7 +149,7 @@ func (c *Compiler) compile(nodeList []*Node, context *CompileContext) (*Compiled
 func (c *Compiler) processNodes(nodeList []*Node, prevContext *CompileContext) error {
 	for _, node := range nodeList {
 		if node.Type == ElementNode {
-			attrs := AttributesFromHtmlNode(node)
+			attrs := node.Attributes
 
 			var err error
 			var dynamic *DynamicDirectives
@@ -171,7 +170,7 @@ func (c *Compiler) processNodes(nodeList []*Node, prevContext *CompileContext) e
 				if dynamic != nil {
 					// replace attributes
 					_, token := c.addDynamic(dynamic)
-					node.Attr = []Attribute{{Name: token}}
+					node.AttrList = []*Attribute{{Name: token}}
 				}
 
 				childNodes := getChildNodes(node)
@@ -189,7 +188,7 @@ func (c *Compiler) processNodes(nodeList []*Node, prevContext *CompileContext) e
 	return nil
 }
 
-// compileTextNode verifica se um node do tipo html.TextNode possui conteúdo dinamico e faz sua compilação
+// compileTextNode verifica se um node do tipo TextNode possui conteúdo dinamico e faz sua compilação
 func (c *Compiler) compileTextNode(node *Node) {
 	text := node.Data
 	compiled, err := Interpolate(text)
@@ -218,23 +217,23 @@ func (c *Compiler) compileTextNode(node *Node) {
 // faz a renderização do Node e transforma-o em um Compiled
 func (c *Compiler) extractCompiled(nodeList []*Node) *Compiled {
 
-	prev := nodeList[0]
-	doc := &Node{Type: DocumentNode, FirstChild: prev}
+	var prev *Node
+	root := &Node{Type: DocumentNode}
 	for _, node := range nodeList {
-		node.Parent = doc
-		if prev != node {
+		node.Parent = root
+		if prev == nil {
+			prev = node
+			root.FirstChild = node
+		} else {
 			prev.NextSibling = node
 			node.PrevSibling = prev
 		}
 	}
 
-	bufferString := bytes.NewBufferString("")
-
-	err := html.Render(bufferString, doc.toHtmlNode())
+	htmlStr, err := root.Render()
 	if err != nil {
 		log.Fatal(err)
 	}
-	htmlStr := bufferString.String()
 
 	// aqui faz a segunda fase do processamento, busca os tokens e gera o executável final
 	matches := RegexExecAll(syntaxDynamicIndexRegex, htmlStr)

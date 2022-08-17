@@ -78,8 +78,8 @@ type Directive struct {
 	//  1. O Transclude fica disponível para o método Process
 	//  2. O método Process pode retornar um *Rendered
 	Terminal bool
-	// false (default): No scope will be created for the directive. The directive will use its Root's scope.
-	// true: A new child scope that prototypically inherits from its Root will be created for the directive's element.
+	// false (default): No scope will be created for the directive. The directive will use its root's scope.
+	// true: A new child scope that prototypically inherits from its root will be created for the directive's element.
 	// If multiple Directives on the same element request a new scope, only one new scope is created.
 	Scope      bool
 	Compile    DirectiveCompileFunc

@@ -2,7 +2,10 @@ package sht
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
+	"github.com/cespare/xxhash"
 	"regexp"
 	"strings"
 )
@@ -136,25 +139,11 @@ func NormalizeName(name string) string {
 	return strings.ToLower(regPrefix.ReplaceAllString(strings.TrimSpace(name), ""))
 }
 
-// Returns the string representation of the element.
-func startingTag(node *Node) {
-	//element = jqLite(element).clone().empty()
-	//var elemHtml = jqLite('<div></div>').append(element).html()
-	//try{
-	//  return element[0].nodeType == = NODE_TYPE_TEXT ? lowercase(elemHtml):
-	//  elemHtml.
-	//  match(/^(<[^>]+>)/)[1].
-	//  replace(/^<([\w-]+)/, function(match, nodeName){return '<' + lowercase(nodeName)})
-	//}
-	//catch(e)
-	//{
-	//  return lowercase(elemHtml)
-	//}
-}
+// ErrFunc returns the formatted Err
+type ErrFunc func(params ...interface{}) error
 
-type ErrorFunc func(params ...interface{}) error
-
-func ErrorTemplate(code string, template ...string) ErrorFunc {
+// Err framework error messages pattern
+func Err(code string, template ...string) ErrFunc {
 	format := "[" + code + "] " + template[0]
 
 	for i := 1; i < len(template); i++ {
@@ -164,6 +153,19 @@ func ErrorTemplate(code string, template ...string) ErrorFunc {
 	return func(params ...interface{}) error {
 		return fmt.Errorf(format, params...)
 	}
+}
+
+// HashMD5 computing the MD5 checksum of strings
+func HashMD5(text string) string {
+	h := md5.New()
+	h.Write([]byte(text))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func HashXXH64(text string) string {
+	h := xxhash.New()
+	h.Write([]byte(text))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func init() {

@@ -17,13 +17,12 @@ func TestUnindentedTemplate(template string) string {
 func TestCompile(t *testing.T, template string, static []string, globalDirectives *Directives) *Compiled {
 	template = TestUnindentedTemplate(template)
 	compiler := NewCompiler(&TemplateSystem{Directives: globalDirectives.NewChild()})
-	compiled, err := compiler.Compile(template)
+	compiled, err := compiler.Compile(template, "template.html")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i, expected := range static {
 		if actual := compiled.static[i]; actual != expected {
-			t.Name()
 			t.Errorf("compiler.Compile(template) | invalid compiled.Static[%d]\n   actual: %q\n expected: %q", i, actual, expected)
 		}
 	}
@@ -50,15 +49,11 @@ func TestRender(t *testing.T, compiled *Compiled, values map[string]interface{},
 }
 
 func TestTemplate(
-	t *testing.T,
-	template string,
-	values map[string]interface{},
-	expected string,
-	globalDirectives *Directives,
+	t *testing.T, template string, values map[string]interface{}, expected string, globalDirectives *Directives,
 ) {
 	template = TestUnindentedTemplate(template)
 	compiler := NewCompiler(&TemplateSystem{Directives: globalDirectives.NewChild()})
-	compiled, err := compiler.Compile(template)
+	compiled, err := compiler.Compile(template, "template.html")
 	if err != nil {
 		t.Fatal(err)
 	}

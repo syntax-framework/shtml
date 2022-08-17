@@ -13,10 +13,10 @@ func (s *TemplateSystem) Load(filepath string) (string, error) {
 	}
 
 	// Debug information
-	//var line = 1
+	//var Line = 1
 	//transcludeSlots = ("\n<!--L:1 " + filepath + "-->") + regLF.ReplaceAllStringFunc(transcludeSlots, func(s string) string {
-	//	line++
-	//	return "\n<!--L:" + strconv.Itoa(line) + " " + filepath + "-->"
+	//	Line++
+	//	return "\n<!--L:" + strconv.Itoa(Line) + " " + filepath + "-->"
 	//})
 	return content, nil
 }
@@ -30,5 +30,5 @@ func (s *TemplateSystem) Compile(filepath string) (*Compiled, error) {
 	compiler := NewCompiler(s)
 	compiler.SetFilepath(filepath)
 
-	return compiler.Compile(content)
+	return compiler.Compile(content, filepath)
 }

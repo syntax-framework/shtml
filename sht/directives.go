@@ -70,8 +70,8 @@ func (d *Directives) collect(node *Node, attrs *Attributes) []*Directive {
 	// use the node name: <directive>
 	d.collectInto(ddMap, NormalizeName(node.Data), ELEMENT)
 
-	// iterate over the Attrs
-	for _, attr := range attrs.Attrs {
+	// iterate over the Map
+	for _, attr := range attrs.Map {
 		addAttrInterpolateDirective(ddMap, attr.Value, attr.Name)
 		d.collectInto(ddMap, attr.Name, ATTRIBUTE)
 	}
