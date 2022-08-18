@@ -134,13 +134,13 @@ func (n *Node) DebugTag() string {
 	w.WriteByte('>')
 
 	if n.File != "" {
-		w.WriteString(" at ")
+		w.WriteString(", File: ")
 		w.WriteByte('"')
 		w.WriteString(n.File)
 		w.WriteByte('"')
-		w.WriteString(" line ")
+		w.WriteString(", Line: ")
 		w.WriteString(strconv.Itoa(n.Line))
-		w.WriteString(" column ")
+		w.WriteString(", Column: ")
 		w.WriteString(strconv.Itoa(n.Column))
 	}
 	return w.String()

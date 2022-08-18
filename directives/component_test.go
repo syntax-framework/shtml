@@ -60,6 +60,16 @@ func Test_Component_Script_Element_Must_Be_Immediate_Child(t *testing.T) {
 	testForErrorCode(t, template, "component:script:location")
 }
 
+// js-param is referencing a non-existent parameter
+func Test_Component_JS_Param_Invalid_Reference(t *testing.T) {
+	template := `
+    <component name="test" param-server-name="string" js-param-name="@server-name-wrong">
+      <div></div>
+    </component>
+  `
+	testForErrorCode(t, template, "component:param:js:ref")
+}
+
 func Test_Component(t *testing.T) {
 
 	template := `
@@ -68,16 +78,34 @@ func Test_Component(t *testing.T) {
       element="div"
     
       param-name="string"
-      param-other="?map"
+      param-other-value="?map"
     
-      js:param-callback="string"
-      js:param-variavel="string"
+      js-param-callback="string"
+      js-param-variavel="string"
+      js-param-name="@other-value"
     
       todo="@TODO: Parametros que deverão ser suportados no futuro"
       controller="RegisteredController"
     >
-      <span onclick="onClick()">...</span>
-      <span onclick="callback" data-ref="mySpan">js input</span>
+      <button onclick="onClick()">
+        onclick = onClick()
+      </button>
+    
+      <button onclick="callback">
+        onclick = callback() // js:param-callback
+      </button>
+    
+      <button onclick="increment">
+        onclick = STX.push("increment", {})
+      </button>
+    
+      <button onclick="increment(count, time, e.MouseX)">
+        onclick = STX.push("increment", { count: count, time: time, MouseX:e.MouseX })
+      </button>
+    
+      <button onclick="push('increment', count, time, e.MouseX)" data-ref="mySpan">
+        onclick = STX.push("increment", { count: count, time: time, MouseX:e.MouseX })
+      </button>
     
       {{count}}
     
@@ -88,9 +116,26 @@ func Test_Component(t *testing.T) {
       </style>
     
       <script>
+    
+        /**
+         * Esse é um comentário que deve ser ignorado
+         */
         const [count, setCount] = STX.state(0)
     
+        console.log("eita porra"); // deve ser ignorado
+    
         let time = new Date()
+        var xpto;
+    
+        "use strict"
+    
+        function mariaGabriela() {
+          xpto = undefined;
+        }
+    
+        // eita diabo
+    
+        maria = 33
     
         const interval = setInterval(() => {
           time = new Date()

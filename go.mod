@@ -7,5 +7,8 @@ require (
 	github.com/cespare/xxhash v1.1.0
 	github.com/erinpentecost/byteline v1.0.0
 	github.com/iancoleman/strcase v0.2.0
+	github.com/tdewolff/minify/v2 v2.12.0
 	golang.org/x/net v0.0.0-20220708220712-1185a9018129
 )
+
+require github.com/tdewolff/parse/v2 v2.6.1 // indirect
