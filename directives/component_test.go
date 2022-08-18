@@ -87,25 +87,22 @@ func Test_Component(t *testing.T) {
       todo="@TODO: Parametros que deverão ser suportados no futuro"
       controller="RegisteredController"
     >
-      <button onclick="onClick()">
-        onclick = onClick()
-      </button>
-    
-      <button onclick="callback">
-        onclick = callback() // js:param-callback
-      </button>
-    
-      <button onclick="increment">
-        onclick = STX.push("increment", {})
-      </button>
-    
-      <button onclick="increment(count, time, e.MouseX)">
-        onclick = STX.push("increment", { count: count, time: time, MouseX:e.MouseX })
-      </button>
-    
-      <button onclick="push('increment', count, time, e.MouseX)" data-ref="mySpan">
-        onclick = STX.push("increment", { count: count, time: time, MouseX:e.MouseX })
-      </button>
+      <!-- Custom variables -->
+      <button onclick="onClick()"></button>
+      <button onclick="callback"></button>
+
+      <!-- Server push -->
+      <button onclick="increment"></button>
+      <button onclick="increment(count, time, e.MouseX)"></button>    
+      <button onclick="push('increment', count, time, e.MouseX)" data-ref="mySpan"></button>
+
+      <!-- JS ignored -->
+      <button onclick="doSomeThing && doOtherThing"></button>
+      <button onclick="doSomeThing && push('increment', count, time, e.MouseX)"></button>
+
+      <!-- Full content -->
+      <button onclick="(e) => doSomeThing"></button>
+      <button onclick="function xpto(e) { doSomeThing(e) }"></button>
     
       {{count}}
     
@@ -152,7 +149,7 @@ func Test_Component(t *testing.T) {
           }
         }
     
-        const clear = () => clearInterval(interval)
+        const onDestroy = () => clearInterval(interval)
       </script>
     </component>
     

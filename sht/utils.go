@@ -181,6 +181,7 @@ func HashMD5(text string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// HashXXH64 computing the XXH64 checksum of strings
 func HashXXH64(text string) string {
 	h := xxhash.New()
 	h.Write([]byte(text))
