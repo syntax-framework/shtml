@@ -44,6 +44,18 @@ func (a *Attributes) Clone() *Attributes {
 	return &Attributes{Map: attributes}
 }
 
+func (a *Attributes) GetAttribute(name string) *Attribute {
+	return a.Map[name]
+}
+
+func (a *Attributes) Get(name string) (value string) {
+	attribute, exists := a.Map[name]
+	if exists {
+		value = attribute.Value
+	}
+	return
+}
+
 func (a *Attributes) Set(key string, value string) {
 	attribute, exists := a.Map[NormalizeName(key)]
 	if exists {
@@ -100,14 +112,6 @@ func (a *Attributes) RemoveClass(value string) {
 	if newValue != oldValue {
 		a.Set("class", newValue)
 	}
-}
-
-func (a *Attributes) Get(name string) (value string) {
-	attribute, exists := a.Map[name]
-	if exists {
-		value = attribute.Value
-	}
-	return
 }
 
 func (a *Attributes) Render() *Rendered {

@@ -83,6 +83,15 @@ func (d *DynamicInterpolateEscaped) Exec(scope *Scope) interface{} {
 
 // Interpolate Compiles a string with markup into an interpolation function.
 //
+// GO INTERPOLATION ( {value} or  !{value} )
+//
+// <element attribute="{return value}">
+// <element attribute="xpto {escape safe}">
+// <element attribute="xpto !{escape unsafe}">
+// <element attribute="!{escape unsafe}">
+// <element>{escape safe}</element>
+// <element>!{escape unsafe}</element>
+//
 // exp = Interpolate('Hello {name}!');
 // exp.Exec({name:'Syntax'}).String() == "Hello Syntax!"
 func Interpolate(text string) (*Compiled, error) {
@@ -108,7 +117,7 @@ func Interpolate(text string) (*Compiled, error) {
 	prev := ' '
 	z := strings.NewReader(text)
 	for {
-		c, _, err := z.ReadRune()
+		currChar, _, err := z.ReadRune()
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -116,7 +125,7 @@ func Interpolate(text string) (*Compiled, error) {
 				return nil, err
 			}
 		}
-		next, _, err := z.ReadRune()
+		nextChar, _, err := z.ReadRune()
 		if err != nil && err != io.EOF {
 			return nil, err
 		}
@@ -129,18 +138,18 @@ func Interpolate(text string) (*Compiled, error) {
 		}
 
 		if !inExpression {
-			if (c == '!' || c == '#') && next == '{' {
+			if (currChar == '!' || currChar == '#') && nextChar == '{' {
 				if content.Len() > 0 {
 					compiled.static = append(compiled.static, content.String())
 				}
-				isEscaped = c == '#'
+				isEscaped = currChar == '#'
 				inExpression = true
 				content = &bytes.Buffer{}
 			}
 		} else {
-			if c == '{' && prev == '\\' {
+			if currChar == '{' && prev == '\\' {
 				innerBrackets++
-			} else if c == '}' {
+			} else if currChar == '}' {
 				if innerBrackets > 0 {
 					innerBrackets--
 				} else {
@@ -157,15 +166,15 @@ func Interpolate(text string) (*Compiled, error) {
 						compiled.dynamics = append(compiled.dynamics, &DynamicInterpolate{expression: program})
 					}
 
-					prev = c
+					prev = currChar
 					content = &bytes.Buffer{}
 					continue
 				}
 			}
 		}
 
-		prev = c
-		content.WriteRune(c)
+		prev = currChar
+		content.WriteRune(currChar)
 	}
 
 	compiled.static = append(compiled.static, content.String())

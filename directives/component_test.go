@@ -101,10 +101,10 @@ func Test_Component(t *testing.T) {
       <button onclick="doSomeThing && push('increment', count, time, e.MouseX)"></button>
 
       <!-- Full content -->
-      <button onclick="(e) => doSomeThing"></button>
+      <button onclick="(e) => doSomeThing">${count} #{time}  ${x + y}</button>
       <button onclick="function xpto(e) { doSomeThing(e) }"></button>
     
-      {{count}}
+      ${count} #{time}
     
       <style>
         span {
@@ -113,11 +113,41 @@ func Test_Component(t *testing.T) {
       </style>
     
       <script>
+        // https://www.w3schools.com/js/js_assignment.asp
+        let x = 33, y = 25;
+        x = y;
+        x = y;
+        x += y;
+        x = x + y;
+        x -= y;
+        x = x - y;
+        x *= y;
+        x = x * y;
+        x /= y;
+        x = x / y;
+        x %= y;
+        x = x % y;
+        x <<= y;
+        x = x << y;
+        x >>= y;
+        x = x >> y;
+        x >>>= y;
+        x = x >>> y;
+        x &= y;
+        x = x & y;
+        x ^= y;
+        x = x ^ y;
+        x |= y;
+        x = x | y;
+        x **= y;
+        x = x ** y;
+        x = (()=>{return x ** y})();
+        x = 33 == true ? 25 : 88;
     
         /**
          * Esse é um comentário que deve ser ignorado
          */
-        const [count, setCount] = STX.state(0)
+        let count = 0;
     
         console.log("eita porra"); // deve ser ignorado
     
@@ -135,7 +165,8 @@ func Test_Component(t *testing.T) {
         maria = 33
     
         const interval = setInterval(() => {
-          time = new Date()
+          count++;
+          time = new Date();
           mySpan.innerText = time.toString()
         }, 1000)
     
