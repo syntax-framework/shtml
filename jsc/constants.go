@@ -1,6 +1,15 @@
 package jsc
 
-import "github.com/syntax-framework/shtml/sht"
+import (
+	"github.com/syntax-framework/shtml/cmn"
+	"github.com/syntax-framework/shtml/sht"
+)
+
+// Javascript Representa um recurso necessário por um componente
+type Javascript struct {
+	Code   string
+	Params []cmn.ComponentParam
+}
 
 // HtmlEventsPush list of events that are enabled by default to push to server
 var HtmlEventsPush = sht.CreateBoolMap([]string{
@@ -10,8 +19,8 @@ var HtmlEventsPush = sht.CreateBoolMap([]string{
 	"onclick", "ondblclick", "onmousedown", "onmousemove", "onmouseout", "onmouseover", "onmouseup", "onwheel",
 })
 
-// ComponentFields The methods and attributes that are part of the structure of a JS component
-var ComponentFields = []string{
+// ClientComponentFields The methods and attributes that are part of the structure of a JS component
+var ClientComponentFields = []string{
 	// used now
 	"api",          // Object - Allows the component to expose an API for external consumption. see ref
 	"onMount",      // () => void - A method that runs after initial render and elements have been mounted
@@ -25,10 +34,10 @@ var ComponentFields = []string{
 	// for future use
 }
 
-var ComponentFieldsMap = sht.CreateBoolMap(ComponentFields)
+var ClientComponentFieldsMap = sht.CreateBoolMap(ClientComponentFields)
 
-// InvalidParamsAndRefs reserved variable names, cannot be used in parameters or references.
+// ClientInvalidParamsAndRefs reserved variable names, cannot be used in parameters or references.
 // The prefix "_$" is also not allowed.
-var InvalidParamsAndRefs = sht.CreateBoolMap(append([]string{
+var ClientInvalidParamsAndRefs = sht.CreateBoolMap(append([]string{
 	"STX", "$", "push", "watch",
-}, ComponentFields...))
+}, ClientComponentFields...))

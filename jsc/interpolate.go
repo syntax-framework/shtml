@@ -21,7 +21,7 @@ func (i *Interpolation) Debug() string {
 	}
 }
 
-// InterpolateJs processa as interpolações javascript em um texto
+// Interpolate processa as interpolações javascript em um texto
 //
 // JAVASCRIPT INTERPOLATION ( ${value} or  #{value} )
 //
@@ -35,11 +35,11 @@ func (i *Interpolation) Debug() string {
 //
 // @TODO: Filters/Pipe. Ex. ${ myValue | upperCase}
 //
-// newText, watches, err = InterpolateJs('Hello ${name}!');
+// newText, watches, err = Interpolate('Hello ${name}!');
 // newText == "Hello _j$_i15151ffacb"
 // interpolations == {"_j$_i15151ffacb": {Expression: "name", isScape: true}}
 // exp.Exec({name:'Syntax'}).String() == "Hello Syntax!"
-func InterpolateJs(text string, sequence *sht.Sequence) (string, map[string]Interpolation, error) {
+func Interpolate(text string, sequence *sht.Sequence) (string, map[string]Interpolation, error) {
 
 	if !strings.ContainsRune(text, '{') || !strings.ContainsAny(text, "$#") {
 		return text, nil, nil

@@ -119,7 +119,7 @@ func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute)
 	// <element attr="${value}"></element>
 	// <element attr="${return value}">
 	// <element attr="#{escape unsafe}">
-	attrValue, interpolations, interErr := InterpolateJs(attr.Value, sequence)
+	attrValue, interpolations, interErr := Interpolate(attr.Value, sequence)
 	if interErr != nil {
 		return interErr
 	}
@@ -148,7 +148,7 @@ func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute)
 		// contextVariables
 		interpolationJsAstScope := interpolationJsAst.BlockStmt.Scope
 
-		// resolve references to global scope (component <script> source code and js-param-*)
+		// resolve references to global scope (component <script> source code and client-param-*)
 		undeclaredBackup := contextAstScope.Undeclared
 		interpolationJsAstScope.Parent = contextAstScope
 		interpolationJsAstScope.HoistUndeclared()
@@ -240,7 +240,7 @@ func (p *ExpressionsParser) parseTextNode(child *sht.Node) error {
 	//
 	// <element>${escape safe}</element>
 	// <element>#{escape unsafe}</element>
-	innerText, interpolations, textInterErr := InterpolateJs(child.Data, sequence)
+	innerText, interpolations, textInterErr := Interpolate(child.Data, sequence)
 	if textInterErr != nil {
 		return textInterErr
 	}
@@ -266,7 +266,7 @@ func (p *ExpressionsParser) parseTextNode(child *sht.Node) error {
 		// contextVariables
 		interpolationJsAstScope := interpolationJsAst.BlockStmt.Scope
 
-		// resolve references to global scope (component <script> source code and js-param-*)
+		// resolve references to global scope (component <script> source code and client-param-*)
 		undeclaredBackup := contextAstScope.Undeclared
 		interpolationJsAstScope.Parent = contextAstScope
 		interpolationJsAstScope.HoistUndeclared()

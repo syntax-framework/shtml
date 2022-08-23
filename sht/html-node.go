@@ -205,3 +205,26 @@ func (n *Node) toXhtml() *html.Node {
 
 	return o
 }
+
+// CreateNodeIdentifier creates a function that when invoked, adds a class so that a node can be identified
+func CreateNodeIdentifier(sequence *Sequence) func(node *Node) string {
+	cache := map[*Node]string{}
+
+	return func(other *Node) string {
+		if identifier, exists := cache[other]; exists {
+			return identifier
+		}
+
+		identifier := other.Attributes.Get("id")
+		if identifier != "" {
+			identifier = "#" + identifier
+			cache[other] = identifier
+		} else {
+			// generate a class "identifier" (unique class)
+			identifier = sequence.NextHash("_")
+			cache[other] = identifier
+			other.Attributes.AddClass(identifier)
+		}
+		return identifier
+	}
+}

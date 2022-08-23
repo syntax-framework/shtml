@@ -60,10 +60,10 @@ func Test_Component_Script_Element_Must_Be_Immediate_Child(t *testing.T) {
 	testForErrorCode(t, template, "component:script:location")
 }
 
-// js-param is referencing a non-existent parameter
+// client-param is referencing a non-existent parameter
 func Test_Component_JS_Param_Invalid_Reference(t *testing.T) {
 	template := `
-    <component name="test" param-server-name="string" js-param-name="@server-name-wrong">
+    <component name="test" param-server-name="string" client-param-name="@server-name-wrong">
       <div></div>
     </component>
   `
@@ -150,9 +150,9 @@ func Test_Component(t *testing.T) {
       param-xxx="string"
       param-other-value="?map"
     
-      js-param-callback="string"
-      js-param-variavel="string"
-      js-param-xxx="@other-value"
+      client-param-callback="string"
+      client-param-variavel="string"
+      client-param-xxx="@other-value"
     
       todo="@TODO: Parametros que deverão ser suportados no futuro"
       controller="RegisteredController"
