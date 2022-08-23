@@ -32,11 +32,11 @@ func testForErrorCode(t *testing.T, template string, errorCode string) {
 
 	if err == nil {
 		t.Errorf("compiler.Compile(template) | expect to receive compilation error")
-	}
-
-	errStr := err.Error()
-	if !strings.HasPrefix(errStr, "["+errorCode+"]") {
-		t.Errorf("compiler.Compile(template) | invalid error\n expected: [%s] .......\n   actual: %s", errorCode, errStr)
+	} else {
+		errStr := err.Error()
+		if !strings.HasPrefix(errStr, "["+errorCode+"]") {
+			t.Errorf("compiler.Compile(template) | invalid error\n expected: [%s] .......\n   actual: %s", errorCode, errStr)
+		}
 	}
 }
 

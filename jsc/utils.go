@@ -86,7 +86,7 @@ func IsDeclaredOnScope(expr *js.Var, scope *js.Scope) (bool, *js.Var) {
 
 func AddDispatcers(ast js.INode, globalScope *js.Scope, globaUsedVars *sht.IndexedMap, stack *WalkScopeStack) {
 	// fast check
-	if hasSideEffect, _ := HasSideEffect(ast); hasSideEffect {
+	if hasSideEffect, _ := HasSideEffect(ast, nil); hasSideEffect {
 		WalkScoped(IVisitorScopedFunc(func(node js.INode, stack *WalkScopeStack) bool {
 			// Essa parte pode ser dinamica, func(INode, *WalkScopeStack) bool
 			//// se é um statement, encapsula sua execução para acionar os watchers
@@ -118,7 +118,6 @@ func AddDispatcers(ast js.INode, globalScope *js.Scope, globaUsedVars *sht.Index
 
 			if jsVar != nil {
 				if isDeclared, jsVarGlobal := IsDeclaredOnScope(jsVar, globalScope); isDeclared {
-					println(jsVarGlobal.JS())
 					// mark jsExpr to dispatch
 					varIndex := globaUsedVars.Add(jsVarGlobal)
 					if valueChangeBeforeReturn {
@@ -127,8 +126,6 @@ func AddDispatcers(ast js.INode, globalScope *js.Scope, globaUsedVars *sht.Index
 						// _$i(index, variable, Expression)
 						stack.Replace(node, CallExpr("_$i", IntegerExpr(varIndex), jsVar, jsExpr))
 						if rightAssignmentExpression != nil {
-							println(rightAssignmentExpression.JS())
-
 							newStack := &WalkScopeStack{}
 							newStack.Push(&WalkScope{
 								replace: func(node js.INode, by js.INode) bool {
@@ -145,7 +142,6 @@ func AddDispatcers(ast js.INode, globalScope *js.Scope, globaUsedVars *sht.Index
 							AddDispatcers(rightAssignmentExpression, globalScope, globaUsedVars, newStack)
 							newStack.Pop()
 
-							println(rightAssignmentExpression.JS())
 							// dont process child again
 							return false
 						}
@@ -175,7 +171,7 @@ func AddDispatcers(ast js.INode, globalScope *js.Scope, globaUsedVars *sht.Index
 }
 
 // HasSideEffect checks if the Expression has a side effect. Returns on first side effect Expression found.
-func HasSideEffect(ast js.INode) (bool, string) {
+func HasSideEffect(ast js.INode, contextAst *js.AST) (bool, string) {
 
 	hasEffect := false
 	expressionJs := ""
@@ -183,14 +179,50 @@ func HasSideEffect(ast js.INode) (bool, string) {
 	js.Walk(VisitorEnterFunc(func(node js.INode) bool {
 		switch node.(type) {
 		case *js.UnaryExpr:
-			hasEffect = true
-			expressionJs = node.JS()
-			return false
-		case *js.BinaryExpr:
-			if IsBinaryAssignmentOperator(node.(*js.BinaryExpr).Op) {
+			if contextAst != nil {
+				// Se informado o escopo, valida referencia
+				if jsVar, isVar := node.(*js.UnaryExpr).X.(*js.Var); isVar {
+					if isDeclared, _ := IsDeclaredOnScope(jsVar, &contextAst.BlockStmt.Scope); isDeclared {
+						hasEffect = true
+						expressionJs = node.JS()
+						return false
+					}
+				}
+			} else {
 				hasEffect = true
 				expressionJs = node.JS()
 				return false
+			}
+		case *js.BinaryExpr:
+			if IsBinaryAssignmentOperator(node.(*js.BinaryExpr).Op) {
+				if contextAst != nil {
+					// Se informado o escopo, valida referencia
+					if jsVar, isVar := node.(*js.BinaryExpr).X.(*js.Var); isVar {
+						if isDeclared, _ := IsDeclaredOnScope(jsVar, &contextAst.BlockStmt.Scope); isDeclared {
+							hasEffect = true
+							expressionJs = node.JS()
+							return false
+						}
+					}
+				} else {
+					hasEffect = true
+					expressionJs = node.JS()
+					return false
+				}
+			}
+		case *js.CallExpr:
+			// is a call to a function in the scope of has a side effect?
+			if contextAst != nil {
+				if jsVar, isVar := node.(*js.CallExpr).X.(*js.Var); isVar {
+					if isDeclared, jsVarCtx := IsDeclaredOnScope(jsVar, &contextAst.BlockStmt.Scope); isDeclared {
+						funcBody := GetContextFunctionBodyExpr(contextAst, jsVarCtx)
+						if hasSideEffect, sideEffectJs := HasSideEffect(funcBody, contextAst); hasSideEffect {
+							hasEffect = true
+							expressionJs = node.JS() + " ->> " + sideEffectJs + ""
+							return false
+						}
+					}
+				}
 			}
 		}
 
@@ -198,6 +230,24 @@ func HasSideEffect(ast js.INode) (bool, string) {
 	}), ast)
 
 	return hasEffect, expressionJs
+}
+
+func GetContextFunctionBodyExpr(contextAst *js.AST, funcRef *js.Var) *js.BlockStmt {
+	for _, stmt := range contextAst.BlockStmt.List {
+		if jsVarDecl, isVarDecl := stmt.(*js.VarDecl); isVarDecl {
+			for _, item := range jsVarDecl.List {
+				if item.Binding == funcRef {
+					if jsArrowFunc, isArrowFunc := item.Default.(*js.ArrowFunc); isArrowFunc {
+						return &jsArrowFunc.Body
+					}
+					if jsFuncDecl, isFuncDecl := item.Default.(*js.FuncDecl); isFuncDecl {
+						return &jsFuncDecl.Body
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 //OpenParenToken              // (

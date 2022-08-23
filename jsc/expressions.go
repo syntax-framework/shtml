@@ -15,6 +15,7 @@ type ExpressionsParser struct {
 	Node               *sht.Node
 	Compiler           *sht.Compiler
 	Sequence           *sht.Sequence
+	ContextAst         *js.AST
 	ContextAstScope    *js.Scope
 	ContextVariables   *sht.IndexedMap
 	Expressions        *sht.IndexedMap
@@ -34,6 +35,22 @@ var errorJsInterpolationSideEffect = sht.Err(
 	"Component: %s",
 )
 
+// Parse Faz o processamento e validação de todas as expressões existente no código HTML do template
+//
+// Check for expressions (${value} or #{value})
+//
+// Text escaping
+// <element>${escape safe}</element>
+// <element>#{escape unsafe}</element>
+//
+// Attributes escaping
+// <element attr="text ${escape safe}">
+// <element attr="text #{escape unsafe}">
+// <element attr="${return value}">
+// <element attr="#{escape unsafe}">
+//
+// Bindings
+// <input value="${value}"></input>
 func (p *ExpressionsParser) Parse() error {
 	node := p.Node
 	t := p.Compiler
@@ -85,6 +102,7 @@ func (p *ExpressionsParser) Parse() error {
 
 func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute) error {
 	sequence := p.Sequence
+	contextAst := p.ContextAst
 	contextAstScope := p.ContextAstScope
 	contextVariables := p.ContextVariables
 	expressions := p.Expressions
@@ -136,7 +154,7 @@ func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute)
 		interpolationJsAstScope.HoistUndeclared()
 		contextAstScope.Undeclared = undeclaredBackup
 
-		if hasSideEffect, sideEffectJs := HasSideEffect(interpolationJsAst); hasSideEffect {
+		if hasSideEffect, sideEffectJs := HasSideEffect(interpolationJsAst, contextAst); hasSideEffect {
 			err = errorJsInterpolationSideEffect(sideEffectJs, interpolationJsAst.JS(), child.DebugTag(), p.Node.DebugTag())
 		}
 
@@ -210,10 +228,11 @@ func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute)
 func (p *ExpressionsParser) parseTextNode(child *sht.Node) error {
 	node := p.Node
 	sequence := p.Sequence
-	globalJsAstScope := p.ContextAstScope
+	contextAst := p.ContextAst
+	contextAstScope := p.ContextAstScope
 	contextVariables := p.ContextVariables
 	expressions := p.Expressions
-	elementClassIds := p.ElementIdentifiers
+	identifiers := p.ElementIdentifiers
 	watchers := p.Watchers
 	watchersByVar := p.WatchersByVar
 
@@ -248,16 +267,16 @@ func (p *ExpressionsParser) parseTextNode(child *sht.Node) error {
 		interpolationJsAstScope := interpolationJsAst.BlockStmt.Scope
 
 		// resolve references to global scope (component <script> source code and js-param-*)
-		undeclaredBackup := globalJsAstScope.Undeclared
-		interpolationJsAstScope.Parent = globalJsAstScope
+		undeclaredBackup := contextAstScope.Undeclared
+		interpolationJsAstScope.Parent = contextAstScope
 		interpolationJsAstScope.HoistUndeclared()
-		globalJsAstScope.Undeclared = undeclaredBackup
+		contextAstScope.Undeclared = undeclaredBackup
 
-		if hasSideEffect, sideEffectJs := HasSideEffect(interpolationJsAst); hasSideEffect {
+		if hasSideEffect, sideEffectJs := HasSideEffect(interpolationJsAst, contextAst); hasSideEffect {
 			err = errorJsInterpolationSideEffect(sideEffectJs, interpolationJsAst.JS(), child.DebugTag(), node.DebugTag())
 		}
 
-		// AddDispatcers(interpolationJsAst, globalJsAstScope, contextVariables, nil)
+		// AddDispatcers(interpolationJsAst, contextAstScope, contextVariables, nil)
 
 		interpolationJs = interpolationJsAst.JS()
 		if strings.HasSuffix(interpolationJs, "; ") {
@@ -276,7 +295,7 @@ func (p *ExpressionsParser) parseTextNode(child *sht.Node) error {
 			"() => { return " + interpolationJs + "; }",
 		)
 
-		elementIdx := strconv.Itoa(elementClassIds.Add(id))
+		elementIdx := strconv.Itoa(identifiers.Add(id))
 		watcherIndex := watchers.Add(
 			// Criate a Watcher that bind element content to Expression result
 			"_$bind(" + elementIdx + ", " + strconv.Itoa(expressionId) + ") /* " + interpolation.Debug() + " */",
@@ -288,7 +307,7 @@ func (p *ExpressionsParser) parseTextNode(child *sht.Node) error {
 			// Uma variável do context só é classificada como observada quando alguma expressão faz uso dessa variável
 			// para realizar alguma lógica.
 			if jsVar, isVar := node.(*js.Var); isVar {
-				if isDeclared, jsVarGlobal := IsDeclaredOnScope(jsVar, globalJsAstScope); isDeclared {
+				if isDeclared, jsVarGlobal := IsDeclaredOnScope(jsVar, contextAstScope); isDeclared {
 					// associate watcher to variable
 					varIndex := contextVariables.Add(jsVarGlobal)
 					watchersByVar[varIndex] = append(watchersByVar[varIndex], watcherIndex)

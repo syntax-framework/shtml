@@ -1,12 +1,12 @@
 package directives
 
 import (
-  "github.com/syntax-framework/shtml/sht"
-  "testing"
+	"github.com/syntax-framework/shtml/sht"
+	"testing"
 )
 
 func Test_Component_Should_Not_Allow_Nested_Components(t *testing.T) {
-  template := `
+	template := `
     <component name="out">
       <div>
         <component name="inner">
@@ -15,80 +15,105 @@ func Test_Component_Should_Not_Allow_Nested_Components(t *testing.T) {
       </div>
     </component>
   `
-  testForErrorCode(t, template, "component:nested")
+	testForErrorCode(t, template, "component:nested")
 }
 
 // a component can only have a single style tag
 func Test_Component_Should_Not_Allow_Multiple_Style_Element(t *testing.T) {
-  template := `
+	template := `
     <component name="test">
       <style>.my-class {color: #FFF}</style>
       <div><style>.my-class-2 {color: #FFF}</style></div>
     </component>
   `
-  testForErrorCode(t, template, "component:style:single")
+	testForErrorCode(t, template, "component:style:single")
 }
 
 // a component can only have a single script tag
 func Test_Component_Should_Not_Allow_Multiple_Script_Element(t *testing.T) {
-  template := `
+	template := `
     <component name="test">
       <script>console.log("hello")</script>
       <div><script>console.log("world!")</script></div>
     </component>
   `
-  testForErrorCode(t, template, "component:script:single")
+	testForErrorCode(t, template, "component:script:single")
 }
 
 // when it has style, it must be an immediate child of the component
 func Test_Component_Style_Element_Must_Be_Immediate_Child(t *testing.T) {
-  template := `
+	template := `
     <component name="test">
       <div><style>.my-class-2 {color: #FFF}</style></div>
     </component>
   `
-  testForErrorCode(t, template, "component:style:location")
+	testForErrorCode(t, template, "component:style:location")
 }
 
 // when it has script, it must be an immediate child of the component
 func Test_Component_Script_Element_Must_Be_Immediate_Child(t *testing.T) {
-  template := `
+	template := `
     <component name="test">
       <div><script>console.log("world!")</script></div>
     </component>
   `
-  testForErrorCode(t, template, "component:script:location")
+	testForErrorCode(t, template, "component:script:location")
 }
 
 // js-param is referencing a non-existent parameter
 func Test_Component_JS_Param_Invalid_Reference(t *testing.T) {
-  template := `
+	template := `
     <component name="test" param-server-name="string" js-param-name="@server-name-wrong">
       <div></div>
     </component>
   `
-  testForErrorCode(t, template, "component:param:js:ref")
+	testForErrorCode(t, template, "component:param:js:ref")
 }
 
 // Expressions with Side Effect in text interpolation block are not allowed.
 func Test_Should_Not_Allow_Side_Effect_in_Interpolation(t *testing.T) {
-  var tests = []string{
-    `<component name="c"> <span>${ a = --a + 1, b }</span> <script>let a = 0; let b = '';</script></component>`,
-    `<component name="c"> <span>${ a++, b }</span> <script>let a = 0; let b = '';</script></component>`,
-    `<component name="c"> <span>${ ++a, b }</span> <script>let a = 0; let b = '';</script></component>`,
-    `<component name="c"> <span>${ a--, b }</span> <script>let a = 0; let b = '';</script></component>`,
-    `<component name="c"> <span>${ --a, b }</span> <script>let a = 0; let b = '';</script></component>`,
-    `<component name="c"> <span>${ a = a + 1, b }</span> <script>let a = 0; let b = '';</script></component>`,
-    `<component name="c"> <span>${ a = --a + a++, b }</span> <script>let a = 0; let b = '';</script></component>`,
-    `<component name="c"> <span class="${ a = --a + a++, b }">text</span> <script>let a = 0; let b = '';</script></component>`,
-  }
-  for _, tt := range tests {
-    testForErrorCode(t, tt, "js:interpolation:sideeffect")
-  }
+	var tests = []string{
+		`<component name="c"> <span>${ a = --a + 1, b }</span> <script>let a = 0; let b = '';</script></component>`,
+		`<component name="c"> <span>${ a++, b }</span> <script>let a = 0; let b = '';</script></component>`,
+		`<component name="c"> <span>${ ++a, b }</span> <script>let a = 0; let b = '';</script></component>`,
+		`<component name="c"> <span>${ a--, b }</span> <script>let a = 0; let b = '';</script></component>`,
+		`<component name="c"> <span>${ --a, b }</span> <script>let a = 0; let b = '';</script></component>`,
+		`<component name="c"> <span>${ a = a + 1, b }</span> <script>let a = 0; let b = '';</script></component>`,
+		`<component name="c"> <span>${ a = --a + a++, b }</span> <script>let a = 0; let b = '';</script></component>`,
+		`<component name="c"> <span class="${ a = --a + a++, b }">text</span> <script>let a = 0; let b = '';</script></component>`,
+		`<component name="c"> 
+      <span>${sideEffectFn()}</span> 
+      <script>
+        let a = 0; 
+        let b = '';
+        const sideEffectFn = () =>{
+          return a = --a + a++, b 
+        }
+      </script>
+    </component>`,
+		`<component name="c"> 
+      <span>${myFn()}</span> 
+      <script>
+        let a = 0; 
+        let b = '';
+
+        const sideEffectFn = () => {
+            return a = --a + a++, b 
+        }
+
+        const myFn = () => {
+          return sideEffectFn()
+        }
+      </script>
+    </component>`,
+	}
+	for _, tt := range tests {
+		testForErrorCode(t, tt, "js:interpolation:sideeffect")
+	}
 }
 
 func Test_Todo_List(t *testing.T) {
-  template := `
+	template := `
     <component name="todo">
       <form onsubmit="handleSubmit()" class="xpto ${inputValue ? 'sujo' : 'limpo'}">
         <label for="listItem">List Item: </label>
@@ -112,12 +137,12 @@ func Test_Todo_List(t *testing.T) {
       </script>
     </component>
   `
-  testForErrorCode(t, template, "component:param:js:ref")
+	testForErrorCode(t, template, "component:param:js:ref")
 }
 
 func Test_Component(t *testing.T) {
 
-  template := `
+	template := `
     <component
       name="clock"
       element="div"
@@ -257,12 +282,12 @@ func Test_Component(t *testing.T) {
     <dois/>
 `
 
-  values := map[string]interface{}{
-    "valueTrue":  true,
-    "valueFalse": false,
-  }
+	values := map[string]interface{}{
+		"valueTrue":  true,
+		"valueFalse": false,
+	}
 
-  expected := `
+	expected := `
     <div>
       A
       
@@ -277,5 +302,5 @@ func Test_Component(t *testing.T) {
       
     </div>`
 
-  sht.TestTemplate(t, template, values, expected, testGDs)
+	sht.TestTemplate(t, template, values, expected, testGDs)
 }

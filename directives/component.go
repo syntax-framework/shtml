@@ -39,7 +39,7 @@ var errorCompScriptLocation = sht.Err(
 
 // Component Responsible for creating components declaratively
 //
-// @TODO: Javascript directives?
+// @TODO: AssetJavascript directives?
 var Component = &sht.Directive{
 	Name:       "component",
 	Restrict:   sht.ELEMENT,
@@ -113,11 +113,16 @@ var Component = &sht.Directive{
 		//	}
 		//}
 
-		jsCode, err := compileJavascript(node, t, script)
-		println(jsCode)
+		assetJavascript, err := compileJavascript(node, t, script)
+		println(assetJavascript)
+
+		// @TODO: Registrar o componente no contexto de compilação
+		//t.RegisterComponent(&sht.Component{
+		//
+		//})
 
 		// quando possui expr parametro live, expr componente não pode ter transclude
-		// Quando um script existir, todos os eventos DOM/Javascript serão substituidos por addEventListener
+		// Quando um script existir, todos os eventos DOM/AssetJavascript serão substituidos por addEventListener
 		return
 	},
 }
@@ -130,7 +135,8 @@ type JsParam struct {
 	Required    bool
 }
 
-type Javascript struct {
+// AssetJavascript Representa um recurso necessário por um componente
+type AssetJavascript struct {
 	Code   string
 	Params []JsParam
 }
@@ -227,7 +233,7 @@ func init() {
 }
 
 // compileJavascript does all the necessary handling to link the template with javascript
-func compileJavascript(node *sht.Node, t *sht.Compiler, script *sht.Node) (asset *Javascript, err error) {
+func compileJavascript(node *sht.Node, t *sht.Compiler, script *sht.Node) (asset *AssetJavascript, err error) {
 
 	sequence := &sht.Sequence{Salt: node.Attributes.Get("name")}
 
@@ -333,21 +339,22 @@ func compileJavascript(node *sht.Node, t *sht.Compiler, script *sht.Node) (asset
 		script.Remove()
 	}
 
-	globalJsAst, globalJsAstErr := js.Parse(parse.NewInputString(jsSource), js.Options{})
+	contextJsAst, globalJsAstErr := js.Parse(parse.NewInputString(jsSource), js.Options{})
 	if globalJsAstErr != nil {
 		err = globalJsAstErr // @TODO: Custom error or Warning
 		return
 	}
-	contextAstScope := &globalJsAst.BlockStmt.Scope
+	contextAstScope := &contextJsAst.BlockStmt.Scope
 
 	// @TODO: fork the project https://github.com/tdewolff/parse/tree/master/js and add feature to keep original formatting
-	jsSource = globalJsAst.JS()
+	jsSource = contextJsAst.JS()
 
 	// 1 - Map all watch expressions. After that, all the variables that are being watched will have been mapped
 	expressionsErr := (&jsc.ExpressionsParser{
 		Node:               node,
 		Compiler:           t,
 		Sequence:           sequence,
+		ContextAst:         contextJsAst,
 		ContextAstScope:    contextAstScope,
 		ContextVariables:   contextVariables,
 		ElementIdentifiers: elementIdentifiers,
@@ -362,7 +369,7 @@ func compileJavascript(node *sht.Node, t *sht.Compiler, script *sht.Node) (asset
 		return
 	}
 
-	// Parse content
+	// Parse Events
 	t.Transverse(node, func(child *sht.Node) (stop bool) {
 		stop = false
 		if child == node || child.Type != sht.ElementNode {
@@ -412,15 +419,17 @@ func compileJavascript(node *sht.Node, t *sht.Compiler, script *sht.Node) (asset
 
 					stmt := eventJsAst.BlockStmt.List[0]
 					if exprStmt, isExprStmt := stmt.(*js.ExprStmt); isExprStmt {
-						if callExpr, isCallExpr := exprStmt.Value.(*js.CallExpr); isCallExpr {
-							// someFunc(arg1, arg2, argn...)
+						switch exprStmt.Value.(type) {
+						case *js.CallExpr:
+							// <element onclick="someFunc(arg1, arg2, argn...)">
+							callExpr := exprStmt.Value.(*js.CallExpr)
 							if jsVar, isVar := callExpr.X.(*js.Var); isVar {
 								if isDeclared, _ := jsc.IsDeclaredOnScope(jsVar, contextAstScope); isDeclared {
 									// is a custom javascript function or "js-param-name"
 									// Ex. <button onclick="onClick()">
-									eventJsCode = callExpr.JS()
-									//eventJsCode = fmt.Sprintf("(e) => { %s }", eventJsCode)
+									eventJsCode = "(e) => { " + callExpr.JS() + " }"
 								} else {
+									// @TODO: STX.push
 									// considers it to be a remote eventIdx call (push)
 									functionName := jsVar.String()
 									eventName := functionName
@@ -436,8 +445,9 @@ func compileJavascript(node *sht.Node, t *sht.Compiler, script *sht.Node) (asset
 							} else {
 								panic("@TODO: what to do? I didn't find a scenario")
 							}
-						} else if jsVar, isVar := exprStmt.Value.(*js.Var); isVar {
-							// someVariable
+						case *js.Var:
+							// <element onclick="someVariable">
+							jsVar := exprStmt.Value.(*js.Var)
 							if isDeclared, _ := jsc.IsDeclaredOnScope(jsVar, contextAstScope); isDeclared {
 								// is a custom javascript variable or "js-param-name"
 								// Ex. <button onclick="callback"></button>
@@ -447,10 +457,13 @@ func compileJavascript(node *sht.Node, t *sht.Compiler, script *sht.Node) (asset
 								// <button onclick="increment"></button>
 								eventJsCode = fmt.Sprintf("(e) => { STX.push('%s', $, e) }", jsVar.String())
 							}
-						} else if arrowFunc, isArrowFunc := exprStmt.Value.(*js.ArrowFunc); isArrowFunc {
-							// (e) => doSomething
-							eventJsCode = arrowFunc.JS()
-						} else {
+						case *js.ArrowFunc:
+							// <element onclick="(e) => doSomething">
+							eventJsCode = exprStmt.Value.(*js.ArrowFunc).JS()
+						case *js.FuncDecl:
+							// <element onclick="function xpto(e){ doSomething() }">
+							eventJsCode = "(e) => { (" + exprStmt.Value.(*js.FuncDecl).JS() + ")() }"
+						default:
 							println("expr que poderia ser?")
 							eventJsCode = fmt.Sprintf("(e) => { %s }", eventJsCode)
 						}
@@ -694,7 +707,7 @@ func compileJavascript(node *sht.Node, t *sht.Compiler, script *sht.Node) (asset
 
 	println(bjs.String())
 
-	jsCode := &Javascript{
+	jsCode := &AssetJavascript{
 		Code: bjs.String(),
 		//Params: jsParams,
 	}
@@ -795,6 +808,7 @@ func parseNodeParams(node *sht.Node) (*componentNodeParams, error) {
 				}
 
 				if isJsParam {
+					// @TODO: Valid param types (string, number, bool, array, object)
 					// param name is valid?
 					if _, isInvalid := jsc.InvalidParamsAndRefs[paramName]; isInvalid || strings.HasPrefix(paramName, "_$") {
 						return nil, errorCompJsParamInvalidName(strcase.ToKebab(paramName), node.DebugTag())
