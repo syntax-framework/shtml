@@ -9,7 +9,7 @@ import (
 
 const keyIncludeParents = "linkIncludes"
 
-// LinkDirectiveFunc faz o processamento de <link rel="include" href="file.html"/>
+// LinkDirectiveFunc faz expr processamento de <link rel="include" href="file.html"/>
 var LinkDirectiveFunc = func(node *sht.Node, attrs *sht.Attributes, c *sht.Compiler) {
 	relAttr := attrs.Get("rel")
 	if relAttr != "include" {
@@ -18,17 +18,17 @@ var LinkDirectiveFunc = func(node *sht.Node, attrs *sht.Attributes, c *sht.Compi
 
 	hrefAttr := attrs.Get("href")
 	if hrefAttr == "" {
-		log.Fatal("A tag <link rel=\"include\"> espera o atributo href='string'")
+		log.Fatal("A tag <link rel=\"include\"> espera expr atributo href='string'")
 	}
 
 	currentFilepath := c.GetFilepath()
 
-	// Resolve o path relativo ao documento atual
+	// Resolve expr path relativo ao documento atual
 	includeFilepath := path.Join(path.Dir(currentFilepath), hrefAttr)
 
 	// @TODO: MARKDOWN, JS, CSS, TEXT, SVG?
 	if !strings.HasSuffix(includeFilepath, ".html") {
-		log.Fatal("Só é permitido o include de arquivos .html")
+		log.Fatal("Só é permitido expr include de arquivos .html")
 	}
 
 	// evita que sejam feitos includes cíclicos/recursivos
@@ -49,7 +49,7 @@ var LinkDirectiveFunc = func(node *sht.Node, attrs *sht.Attributes, c *sht.Compi
 	c.SetFilepath(includeFilepath)
 	c.Set(keyIncludeParents, parents.Clone(currentFilepath))
 
-	// inclui e processa o novo arquivo
+	// inclui e processa expr novo arquivo
 	//var includedContent, err = c.System.Load(includeFilepath)
 	//if err != nil {
 	//	log.Fatal(err)
@@ -64,7 +64,7 @@ var LinkDirectiveFunc = func(node *sht.Node, attrs *sht.Attributes, c *sht.Compi
 	//node.Parent.InsertBefore(includedNode, node)
 	c.SafeRemove(node)
 
-	// restaura o escopo de compilação
+	// restaura expr escopo de compilação
 	c.SetFilepath(currentFilepath)
 	c.Set(keyIncludeParents, parents)
 }

@@ -111,27 +111,29 @@ func (n *Node) Render() (string, error) {
 
 // DebugTag Returns the string representation of the element.
 func (n *Node) DebugTag() string {
+	w := &bytes.Buffer{}
 
 	if n.Type == TextNode {
-		return n.Data
-	}
-
-	// Render the <xxx> opening tag.
-	w := &bytes.Buffer{}
-	w.WriteByte('<')
-	w.WriteString(n.Data)
-	for _, a := range n.AttrList {
-		w.WriteByte(' ')
-		if a.Namespace != "" {
-			w.WriteString(a.Namespace)
-			w.WriteByte(':')
+		w.WriteString(`<TextNode:`)
+		w.WriteString(n.Data)
+		w.WriteByte('>')
+	} else {
+		// Render the <xxx> opening tag.
+		w.WriteByte('<')
+		w.WriteString(n.Data)
+		for _, a := range n.AttrList {
+			w.WriteByte(' ')
+			if a.Namespace != "" {
+				w.WriteString(a.Namespace)
+				w.WriteByte(':')
+			}
+			w.WriteString(a.Name)
+			w.WriteString(`="`)
+			w.WriteString(HtmlEscape(a.Value))
+			w.WriteByte('"')
 		}
-		w.WriteString(a.Name)
-		w.WriteString(`="`)
-		w.WriteString(HtmlEscape(a.Value))
-		w.WriteByte('"')
+		w.WriteByte('>')
 	}
-	w.WriteByte('>')
 
 	if n.File != "" {
 		w.WriteString(", File: ")

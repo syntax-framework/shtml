@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/cespare/xxhash"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -26,6 +27,63 @@ func (p StringSet) Clone(others ...string) StringSet {
 		nmap[other] = true
 	}
 	return nmap
+}
+
+type IndexedMap struct {
+	size   int
+	values map[interface{}]int
+}
+
+func (m *IndexedMap) IsEmpty() bool {
+	return m.size == 0
+}
+
+func (m *IndexedMap) Add(value interface{}) int {
+	index, exists := m.values[value]
+	if !exists {
+		index = m.size
+		if m.values == nil {
+			m.values = map[interface{}]int{}
+		}
+		m.values[value] = m.size
+		m.size++
+	}
+	return index
+}
+
+func (m *IndexedMap) Get(value interface{}) int {
+	index, exists := m.values[value]
+	if !exists {
+		return -1
+	}
+	return index
+}
+
+func (m *IndexedMap) ToArray() []interface{} {
+	arr := make([]interface{}, m.size)
+	for value, index := range m.values {
+		arr[index] = value
+	}
+	return arr
+}
+
+// Sequence identifier generator utility qeu ensures that all executions have the same result
+type Sequence struct {
+	Salt string
+	seq  int
+}
+
+func (s *Sequence) NextHash(prefix string) string {
+	if prefix == "" {
+		prefix = "_"
+	}
+	s.seq++
+	return prefix + HashXXH64(s.Salt+strconv.Itoa(s.seq))
+}
+
+func (s *Sequence) NextInt() int {
+	s.seq++
+	return s.seq
 }
 
 type RegexMatch struct {
@@ -186,6 +244,14 @@ func HashXXH64(text string) string {
 	h := xxhash.New()
 	h.Write([]byte(text))
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+func CreateBoolMap(arr []string) map[string]bool {
+	out := map[string]bool{}
+	for _, s := range arr {
+		out[s] = true
+	}
+	return out
 }
 
 func init() {
