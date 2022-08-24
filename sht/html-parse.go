@@ -9,12 +9,12 @@ import (
 
 // Multiple directives [{0}{1}, {2}{3}] asking for {4} on: {5}
 var errorParseTokenizer = Err(
-	"parse:tokenizer",
+	"parse.tokenizer",
 	"An unexpected error occurred while tokenizing the html.", "Line: %d", "Column: %d", "Caused by: %s",
 )
 
 var errorParseEndTag = Err(
-	"parse:endingTag",
+	"parse.endingTag",
 	"Mismatched ending tag.", "Expected: %d", "Found: %d", "Line: %d", "Column: %d",
 )
 

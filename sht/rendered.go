@@ -8,6 +8,7 @@ type Rendered struct {
 	Dynamics    []interface{} `json:"d"` // nil, string, Rendered
 	Fingerprint string        `json:"f"`
 	Root        bool          `json:"r"`
+	Assets      []string      `json:"a"` // all the resources needed by that part
 }
 
 // Write the output to the given buffer

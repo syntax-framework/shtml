@@ -67,7 +67,16 @@ func (n *Node) AppendChild(c *Node) {
 	c.PrevSibling = last
 }
 
-// Remove
+// GetChildNodes returns a collection (list) of an elements's child nodes.
+func (n *Node) GetChildNodes() []*Node {
+	var childNodes []*Node
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		childNodes = append(childNodes, child)
+	}
+	return childNodes
+}
+
+// Remove remove this node from parent node
 func (n *Node) Remove() {
 	if n.Parent != nil {
 		n.Parent.RemoveChild(n)

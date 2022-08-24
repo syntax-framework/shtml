@@ -8,7 +8,8 @@ import (
 // TemplateSystem interface for configuration, loading and compilation of templates
 type TemplateSystem interface {
 	Load(filepath string) (string, error)
-	Compile(filepath string) (*sht.Compiled, error)
+	Compile(filepath string) (*sht.Compiled, *sht.Context, error)
+	NewScope() *sht.Scope
 }
 
 var globalDirectives = &sht.Directives{}
@@ -20,10 +21,14 @@ func Register(directive *sht.Directive) {
 
 // New create a new TemplateSystem
 func New(loader func(filepath string) (string, error)) TemplateSystem {
-	return &sht.TemplateSystem{Loader: loader, Directives: globalDirectives.NewChild()}
+	return &sht.TemplateSystem{
+		Loader:     loader,
+		Directives: globalDirectives.NewChild(),
+	}
 }
 
 func init() {
 	Register(directives.IFElement)
 	Register(directives.IFAttribute)
+	Register(directives.Script)
 }

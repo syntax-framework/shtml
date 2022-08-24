@@ -1,13 +1,17 @@
 package sht
 
 type Scope struct {
-	root   *Scope
-	parent *Scope
-	data   map[string]interface{}
+	Context *Context // allows directives to save context information during execution
+	root    *Scope
+	parent  *Scope
+	data    map[string]interface{}
 }
 
 func NewRootScope() *Scope {
-	scope := &Scope{data: map[string]interface{}{}}
+	scope := &Scope{
+		Context: NewContext(),
+		data:    map[string]interface{}{},
+	}
 	scope.root = scope
 	return scope
 }

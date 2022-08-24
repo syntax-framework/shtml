@@ -7,8 +7,8 @@ import (
 
 // Javascript Representa um recurso necessário por um componente
 type Javascript struct {
-	Code   string
-	Params []cmn.ComponentParam
+	Content         string
+	ComponentParams []cmn.ComponentParam
 }
 
 // HtmlEventsPush list of events that are enabled by default to push to server

@@ -28,7 +28,7 @@ func testForErrorCode(t *testing.T, template string, errorCode string) {
 		}),
 		Directives: testGDs.NewChild(),
 	}
-	_, err := ts.Compile("template.html")
+	_, _, err := ts.Compile("template.html")
 
 	if err == nil {
 		t.Errorf("compiler.Compile(template) | expect to receive compilation error")

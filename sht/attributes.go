@@ -56,6 +56,16 @@ func (a *Attributes) Get(name string) (value string) {
 	return
 }
 
+func (a *Attributes) GetOrDefault(name string, dfault string) (value string) {
+	attribute, exists := a.Map[name]
+	if exists {
+		value = attribute.Value
+	} else {
+		value = dfault
+	}
+	return
+}
+
 func (a *Attributes) Set(key string, value string) {
 	attribute, exists := a.Map[NormalizeName(key)]
 	if exists {
@@ -171,7 +181,7 @@ func (a *Attributes) Render() *Rendered {
 
 	static = append(static, staticCurr.String())
 
-	// @TODO: Cache processing, if data hasn't changed since template, keep it
+	// @TODO: Cache processing, if Context hasn't changed since template, keep it
 	return &Rendered{
 		Static:   &static,
 		Dynamics: dynamics,

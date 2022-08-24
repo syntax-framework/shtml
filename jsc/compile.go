@@ -6,6 +6,7 @@ import (
 	"github.com/syntax-framework/shtml/sht"
 	"github.com/tdewolff/parse/v2"
 	"github.com/tdewolff/parse/v2/js"
+	"golang.org/x/net/html/atom"
 	"strconv"
 	"strings"
 )
@@ -92,11 +93,23 @@ func init() {
 }
 
 // Compile does all the necessary handling to link the template with javascript
-func Compile(node *sht.Node, script *sht.Node, t *sht.Compiler) (asset *Javascript, err error) {
+func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset *Javascript, err error) {
 
-	sequence := &sht.Sequence{Salt: node.Attributes.Get("name")}
+	sequence := &sht.Sequence{}
+	nodeParentIsComponent := false
+	if nodeParent.Data == "component" {
+		nodeParentIsComponent = true
+		sequence.Salt = nodeParent.Attributes.Get("name")
+	} else {
+		if nodeScript != nil && nodeScript.FirstChild != nil {
+			sequence.Salt = sht.HashXXH64(nodeScript.FirstChild.Data)
+		} else {
+			sequence.Salt = t.NextHash()
+		}
+	}
 
-	// classe única
+	// unique node identifier.
+	// @TODO: make global to prevent a node from having more than one identifier
 	getNodeIdentifier := sht.CreateNodeIdentifier(sequence)
 
 	//
@@ -138,15 +151,15 @@ func Compile(node *sht.Node, script *sht.Node, t *sht.Compiler) (asset *Javascri
 	elementIdentifiers := &sht.IndexedMap{}
 
 	// parse component params
-	params, paramsErr := ParseComponentParams(node)
-	if paramsErr != nil {
-		return nil, paramsErr
+	var componentParams *NodeComponentParams
+	if nodeParentIsComponent {
+		if componentParams, err = ParseComponentParams(nodeParent); err != nil {
+			return nil, err
+		}
 	}
 
-	jsParams, attrsToRemove := params.ClientParams, params.AttrsToRemove
-
 	// parse references to elements within the template
-	references, refErr := ParseReferences(node, t, elementIdentifiers)
+	references, refErr := ParseReferences(nodeParent, t, elementIdentifiers)
 	if refErr != nil {
 		return nil, refErr
 	}
@@ -157,45 +170,51 @@ func Compile(node *sht.Node, script *sht.Node, t *sht.Compiler) (asset *Javascri
 			elementIdentifiers.Add(getNodeIdentifier(reference.Node))
 
 			// validates reference names against parameter names, avoids double definition of variables
-			identifier := reference.Attr.Normalized
-			if params.ClientParamsByName[identifier] != nil {
-				return nil, errorCompJsRedeclaration(identifier, "reference -> client-param", node.DebugTag())
+			if componentParams != nil {
+				identifier := reference.Attr.Normalized
+				if componentParams.ClientParamsByName[identifier] != nil {
+					return nil, errorCompJsRedeclaration(identifier, "reference -> client-param", nodeParent.DebugTag())
+				}
 			}
 		}
 	}
 
 	// initialize the parameters (need to be visible in global scope to be indexed)
-	jsBuf := &bytes.Buffer{}
-	if len(jsParams) > 0 {
-		jsBuf.WriteString("\n    // parameters (define)")
-		jsBuf.WriteString("\n    let _$params = $.params;\n")
-		for _, jsParam := range jsParams {
+	var jsSource string
+	if componentParams != nil && len(componentParams.ClientParams) > 0 {
+		compJsParams := &bytes.Buffer{}
+		compJsParams.WriteString("\n    // parameters (define)")
+		compJsParams.WriteString("\n    let _$params = $.params;\n")
+		for _, jsParam := range componentParams.ClientParams {
 			name := jsParam.Name
-			jsBuf.WriteString(fmt.Sprintf("    let %s = _$params['%s'];\n", name, name))
+			compJsParams.WriteString(fmt.Sprintf("    let %s = _$params['%s'];\n", name, name))
 		}
-		jsBuf.WriteString("\n    // parameters (watch)")
-		jsBuf.WriteString("\n    $.onChangeParams(() => {\n")
-		for _, jsParam := range jsParams {
+		compJsParams.WriteString("\n    // parameters (watch)")
+		compJsParams.WriteString("\n    $.onChangeParams(() => {\n")
+		for _, jsParam := range componentParams.ClientParams {
 			name := jsParam.Name
-			jsBuf.WriteString(fmt.Sprintf("      %s = _$params['%s'];\n", name, name))
+			compJsParams.WriteString(fmt.Sprintf("      %s = _$params['%s'];\n", name, name))
 		}
-		jsBuf.WriteString("    });\n")
+		compJsParams.WriteString("    });\n")
+		jsSource = compJsParams.String()
 	}
 
-	jsSource := jsBuf.String()
-	//jsSource := ""
+	// @TODO: Map all watches that are actually static (the variable is never changed by js) in these cases, display warning to developer?
 
-	// @TODO: Mapear todos os watches que na verdade são estáticos (a variável nunca sofre alteração pelo js)
-	// Nestes casos, exibir warning para desenvolvedor?
-
-	if script != nil {
-		if script.FirstChild != nil {
+	if nodeScript != nil {
+		if nodeScript.FirstChild != nil {
 			// original source code
-			jsSource = jsSource + script.FirstChild.Data
+			jsSource = jsSource + nodeScript.FirstChild.Data
 		}
 
-		// remove script from render
-		script.Remove()
+		if nodeParentIsComponent {
+			// when component, remove script from render
+			nodeScript.Remove()
+		} else {
+			// for page scripts, remove only content, will be initialized by syntax using this element
+			nodeScript.FirstChild = nil
+			nodeScript.LastChild = nil
+		}
 	}
 
 	contextJsAst, globalJsAstErr := js.Parse(parse.NewInputString(jsSource), js.Options{})
@@ -210,7 +229,7 @@ func Compile(node *sht.Node, script *sht.Node, t *sht.Compiler) (asset *Javascri
 
 	// 1 - Map all watch expressions. After that, all the variables that are being watched will have been mapped
 	expressionsErr := (&ExpressionsParser{
-		Node:               node,
+		Node:               nodeParent,
 		Compiler:           t,
 		Sequence:           sequence,
 		ContextAst:         contextJsAst,
@@ -229,14 +248,14 @@ func Compile(node *sht.Node, script *sht.Node, t *sht.Compiler) (asset *Javascri
 	}
 
 	// Parse Events
-	t.Transverse(node, func(child *sht.Node) (stop bool) {
+	t.Transverse(nodeParent, func(child *sht.Node) (stop bool) {
 		stop = false
-		if child == node || child.Type != sht.ElementNode {
+		if child == nodeParent || child.Type != sht.ElementNode {
 			return
 		}
 
-		// @TODO: Quando child é um Component registrado, faz expr processamento adequado
-		// isComponent := false
+		// @TODO: When child is a registered component, do proper expr processing
+		// nodeParentIsComponent := false
 
 		for attrNameNormalized, attr := range child.Attributes.Map {
 			if strings.HasPrefix(attrNameNormalized, "on") {
@@ -323,7 +342,6 @@ func Compile(node *sht.Node, script *sht.Node, t *sht.Compiler) (asset *Javascri
 							// <element onclick="function xpto(e){ doSomething() }">
 							eventJsCode = "(e) => { (" + exprStmt.Value.(*js.FuncDecl).JS() + ")() }"
 						default:
-							println("expr que poderia ser?")
 							eventJsCode = fmt.Sprintf("(e) => { %s }", eventJsCode)
 						}
 					}
@@ -363,15 +381,38 @@ func Compile(node *sht.Node, script *sht.Node, t *sht.Compiler) (asset *Javascri
 
 	// write the component JS
 	bjs := &bytes.Buffer{}
-	bjs.WriteString(fmt.Sprintf("STX.r('%s', function (STX) {\n", node.Data))
-	// component constants
-	if script != nil {
-		bjs.WriteString(fmt.Sprintf(`  const _$line = %d;`, script.Line))
+
+	if nodeParentIsComponent {
+		bjs.WriteString("STX.c('" + nodeParent.Data + "', function (STX) {\n")
 	} else {
-		bjs.WriteString(fmt.Sprintf(`  const _$line = %d;`, node.Line))
+		var anchorId string
+		if nodeScript != nil {
+			nodeScript.Attributes.Set("data-syntax-s", "")
+			anchorId = getNodeIdentifier(nodeScript)
+		} else {
+			anchorScript := &sht.Node{
+				Data:       "script",
+				DataAtom:   atom.Script,
+				File:       nodeParent.File,
+				Line:       nodeParent.Line,
+				Column:     nodeParent.Column,
+				Attributes: &sht.Attributes{Map: map[string]*sht.Attribute{}},
+			}
+			anchorScript.Attributes.Set("data-syntax-s", "")
+			nodeParent.AppendChild(anchorScript)
+			anchorId = getNodeIdentifier(anchorScript)
+		}
+		bjs.WriteString("STX.s('" + anchorId + "', function (STX) {\n")
+	}
+
+	// component constants
+	if nodeScript != nil {
+		bjs.WriteString(fmt.Sprintf(`  const _$line = %d;`, nodeScript.Line))
+	} else {
+		bjs.WriteString(fmt.Sprintf(`  const _$line = %d;`, nodeParent.Line))
 	}
 	bjs.WriteRune('\n')
-	bjs.WriteString(fmt.Sprintf(`  const _$file = "%s";`, node.File))
+	bjs.WriteString(fmt.Sprintf(`  const _$file = "%s";`, nodeParent.File))
 	bjs.WriteRune('\n')
 
 	if !watchers.IsEmpty() {
@@ -427,10 +468,6 @@ func Compile(node *sht.Node, script *sht.Node, t *sht.Compiler) (asset *Javascri
 		}
 		bjs.WriteString("\n    ],")
 	}
-
-	// identifies which watches are candidates for replay when a variable changes
-	// [ $varIndex = [$watchIndexA, $watchIndexB]]
-	//watchersByVar := map[int][]int{}
 
 	// watchers by vars
 	if !contextVariables.IsEmpty() {
@@ -518,14 +555,10 @@ func Compile(node *sht.Node, script *sht.Node, t *sht.Compiler) (asset *Javascri
 			}
 			bjs.WriteRune('\n')
 
-			// remove attribute from node (to not be rendered anymore)
+			// remove attribute from nodeParent (to not be rendered anymore)
 			ref.Node.Attributes.Remove(ref.Attr)
 		}
 	}
-
-	// see https://hexdocs.pm/phoenix_live_view/bindings.html
-	// Inicializa os eventos desse componente
-	// Se expr evento for
 
 	// START - Return instance
 	bjs.WriteString("\n      return {")
@@ -560,15 +593,17 @@ func Compile(node *sht.Node, script *sht.Node, t *sht.Compiler) (asset *Javascri
 	bjs.WriteString("})")           // END
 
 	// to no longer be rendered
-	for _, attr := range attrsToRemove {
-		node.Attributes.Remove(attr)
+	if componentParams != nil {
+		for _, attr := range componentParams.AttrsToRemove {
+			nodeParent.Attributes.Remove(attr)
+		}
 	}
 
 	println(bjs.String())
 
 	jsCode := &Javascript{
-		Code: bjs.String(),
-		//Params: ClientParams,
+		Content: bjs.String(),
+		//ComponentParams: ClientParams,
 	}
 
 	return jsCode, nil

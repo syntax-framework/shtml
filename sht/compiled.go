@@ -3,14 +3,16 @@ package sht
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"github.com/syntax-framework/shtml/cmn"
 	"strings"
 )
 
 // Compiled structure representing a Compiled template
 type Compiled struct {
-	static      []string  // a list of literal strings
-	dynamics    []Dynamic // functions to get the dynamics part of this Compiled
-	fingerprint string    // used to identify the static part of this Compiled
+	Assets      []*cmn.Asset // Reference to all resources that can be used by this compiled
+	static      []string     // a list of literal strings
+	dynamics    []Dynamic    // functions to get the dynamics part of this Compiled
+	fingerprint string       // used to identify the static part of this Compiled
 	root        bool
 }
 
@@ -32,6 +34,8 @@ func (c *Compiled) Exec(scope *Scope) *Rendered {
 			out.Dynamics[i] = value
 		} else if rendered, isRendered := result.(*Rendered); isRendered {
 			out.Dynamics[i] = rendered
+			out.Assets = append(out.Assets, rendered.Assets...)
+			rendered.Assets = nil
 		} else if compiled, isCompiled := result.(*Compiled); isCompiled {
 			out.Dynamics[i] = compiled.Exec(scope)
 		}

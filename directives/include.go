@@ -21,7 +21,7 @@ var LinkDirectiveFunc = func(node *sht.Node, attrs *sht.Attributes, c *sht.Compi
 		log.Fatal("A tag <link rel=\"include\"> espera expr atributo href='string'")
 	}
 
-	currentFilepath := c.GetFilepath()
+	currentFilepath := node.File
 
 	// Resolve expr path relativo ao documento atual
 	includeFilepath := path.Join(path.Dir(currentFilepath), hrefAttr)
@@ -33,21 +33,24 @@ var LinkDirectiveFunc = func(node *sht.Node, attrs *sht.Attributes, c *sht.Compi
 
 	// evita que sejam feitos includes cíclicos/recursivos
 	var parents sht.StringSet
-	parentsI := c.Get(keyIncludeParents)
+	parentsI := c.Context.Get(keyIncludeParents)
 	if parentsI != nil {
 		parents = parentsI.(sht.StringSet)
 	} else {
 		parents = sht.StringSet{}
-		c.Set(keyIncludeParents, parents)
+		c.Context.Set(keyIncludeParents, parents)
 	}
 
 	if parents.Contains(includeFilepath) {
-		c.RaiseFileError("Cyclic/recursive include identified", includeFilepath)
+		//var linha = (template.substr(0, RegexMatch.index).split('\n').length);
+		//panic(msg + ' < arquivo: "' + filePath + '", linha: ' + linha + ' >');
+		//panic(msg + " <File: '" + filePath + "'" + ">")
+		//c.RaiseFileError("Cyclic/recursive include identified", includeFilepath)
 	}
 
 	// define algumas variáveis no escopo de processamento
-	c.SetFilepath(includeFilepath)
-	c.Set(keyIncludeParents, parents.Clone(currentFilepath))
+	//c.SetFilepath(includeFilepath)
+	c.Context.Set(keyIncludeParents, parents.Clone(currentFilepath))
 
 	// inclui e processa expr novo arquivo
 	//var includedContent, err = c.System.Load(includeFilepath)
@@ -65,8 +68,8 @@ var LinkDirectiveFunc = func(node *sht.Node, attrs *sht.Attributes, c *sht.Compi
 	c.SafeRemove(node)
 
 	// restaura expr escopo de compilação
-	c.SetFilepath(currentFilepath)
-	c.Set(keyIncludeParents, parents)
+	//c.SetFilepath(currentFilepath)
+	c.Context.Set(keyIncludeParents, parents)
 }
 
 var LinkDirective = &sht.Directive{

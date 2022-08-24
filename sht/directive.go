@@ -147,9 +147,9 @@ func (nd *DynamicDirectives) Exec(scope *Scope) interface{} {
 	}
 
 	// RECURSION
-	if !nd.terminal {
-		println("recursion")
-	}
+	//if !nd.terminal {
+	//	println("recursion")
+	//}
 
 	// LEAVE
 	for _, directive := range nd.leave {

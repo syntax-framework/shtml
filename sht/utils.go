@@ -191,7 +191,7 @@ var booleanAtributes = []string{
 	"readonly", "required", "reversed", "selected", "truespeed",
 }
 
-var regPrefix = regexp.MustCompile(`^((?:x|data)[:\-_])`)
+var regPrefix = regexp.MustCompile(`^((?:x|Context)[:\-_])`)
 
 func NormalizeName(name string) string {
 	return strings.ToLower(regPrefix.ReplaceAllString(strings.TrimSpace(name), ""))

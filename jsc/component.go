@@ -17,10 +17,18 @@ var errorCompClientParamInvalidName = sht.Err(
 	"The parameter name is invalid.", `Param: client-param-%s="@%s"`, "Component: %s",
 )
 
+type NodeComponentParams struct {
+	ServerParams       []cmn.ComponentParam // server params
+	ClientParams       []cmn.ComponentParam // javascript params
+	AttrsToRemove      []*sht.Attribute
+	ServerParamsByName map[string]*cmn.ComponentParam
+	ClientParamsByName map[string]*cmn.ComponentParam
+}
+
 // ParseComponentParams Processes the parameters of a component
 //
 // Qualquer componente
-func ParseComponentParams(node *sht.Node) (*cmn.NodeComponentParams, error) {
+func ParseComponentParams(node *sht.Node) (*NodeComponentParams, error) {
 	// parse attributes
 	var serverParams []cmn.ComponentParam // server params
 	var clientParams []cmn.ComponentParam // javascript params
@@ -114,7 +122,7 @@ func ParseComponentParams(node *sht.Node) (*cmn.NodeComponentParams, error) {
 		}
 	}
 
-	return &cmn.NodeComponentParams{
+	return &NodeComponentParams{
 		ServerParams:       serverParams,
 		ClientParams:       clientParams,
 		AttrsToRemove:      attrsToRemove,

@@ -2,34 +2,36 @@ package sht
 
 import (
 	"bytes"
+	"github.com/syntax-framework/shtml/cmn"
 	"log"
 	"math"
 	"regexp"
 	"strconv"
 )
 
-// Compiler escopo do template html sendo compilado
+// Compiler scope of html template being compiled
 type Compiler struct {
-	System     *TemplateSystem
-	Directives *Directives
-	filepath   string
+	System     *TemplateSystem     // Reference to the instance that generated this TemplateSystem compiler
+	Directives *Directives         // The directives registered to run in this build
+	Assets     map[*cmn.Asset]bool // The possible resources that will be used by this template
+	Context    *Context            // allows directives to save context information during compilation
 	dynamics   []Dynamic
-	data       map[string]interface{}
+	sequence   *Sequence
 }
 
-// CompileContext used for previous compilation of the current node
-type CompileContext struct {
-	transcludeDirective           *Directive
-	hasElementTranscludeDirective bool
-	needsNewScope                 bool
-	newScopeDirective             string
-	controllerDirectives          string
-	newIsolateScopeDirective      string
-	templateDirective             string
-	maxPriority                   int
+// _PrevContext used for previous compilation of the current node
+type _PrevContext struct {
+	//transcludeDirective           *Directive
+	//hasElementTranscludeDirective bool
+	//needsNewScope                 bool
+	//newScopeDirective             string
+	//controllerDirectives          string
+	//newIsolateScopeDirective      string
+	//templateDirective             string
+	MaxPriority int
 }
 
-// syntaxDynamicIndexStr usado para marcar no html locais de conteúdo dinamico
+// syntaxDynamicIndexStr used to mark dynamic content locations in html
 var syntaxDynamicIndexStr = "____sdi__"
 
 // syntaxDynamicIndexRegex extra space, to be compatible with text and attributes
@@ -40,22 +42,8 @@ func NewCompiler(ts *TemplateSystem) *Compiler {
 		System:     ts,
 		Directives: ts.Directives.NewChild(),
 		dynamics:   []Dynamic{},
-		data:       map[string]interface{}{},
+		Context:    NewContext(),
 	}
-}
-
-// Get obtém algum parametro do data
-func (c *Compiler) Get(key string) (value interface{}) {
-	value, exists := c.data[key]
-	if !exists {
-		return nil
-	}
-	return value
-}
-
-// Set Salva algum dado no data
-func (c *Compiler) Set(key string, value interface{}) {
-	c.data[key] = value
 }
 
 func (c *Compiler) Compile(template string, filepath string) (*Compiled, error) {
@@ -64,6 +52,43 @@ func (c *Compiler) Compile(template string, filepath string) (*Compiled, error) 
 		return nil, err
 	}
 	return c.compile(nodeList, nil)
+}
+
+func (c *Compiler) IsComponente(child *Node) bool {
+	// @TODO: Descobir se o node é um Componente registrado
+	return false
+}
+
+// NextHash Used by components to predictively obtain a hash
+func (c *Compiler) NextHash() string {
+	if c.sequence == nil {
+		c.sequence = &Sequence{}
+	}
+	return c.sequence.NextHash("")
+}
+
+// RegisterAssetJsContent register an anonymous javascript that can be used in this template
+func (c *Compiler) RegisterAssetJsContent(content string) *cmn.Asset {
+	name := HashXXH64(content)
+	asset := &cmn.Asset{
+		Content: content,
+		Name:    name,
+		Etag:    name,
+		Size:    int64(len([]byte(content))),
+		Type:    cmn.Javascript,
+	}
+
+	c.RegisterAsset(asset)
+
+	return asset
+}
+
+// RegisterAsset register an asset that can be used in this template
+func (c *Compiler) RegisterAsset(asset *cmn.Asset) {
+	if c.Assets == nil {
+		c.Assets = map[*cmn.Asset]bool{}
+	}
+	c.Assets[asset] = true
 }
 
 // ExtractRoot remove o node do root atual e retorna um novo root para os filhos do node atual
@@ -100,23 +125,6 @@ func (c *Compiler) SafeRemove(node *Node) {
 	}
 }
 
-// RaiseFileError Permite disparar erro de processamento do arquivo, facilitando o desenvolvimento
-func (c *Compiler) RaiseFileError(msg string, filePath string) {
-	//var linha = (template.substr(0, RegexMatch.index).split('\n').length);
-	//panic(msg + ' < arquivo: "' + filePath + '", linha: ' + linha + ' >');
-	panic(msg + " <File: '" + filePath + "'" + ">")
-}
-
-// SetFilepath define qual arquivo está sendo processado
-func (c *Compiler) SetFilepath(filepath string) {
-	c.filepath = filepath
-}
-
-// GetFilepath obtém o caminho do arquivo sendo processado atualmente
-func (c *Compiler) GetFilepath() string {
-	return c.filepath
-}
-
 // Transverse run callback for node and all its children, until callback returns true
 //
 // @TODO: Alterar o algoritmo para o formato enter() exit().
@@ -134,22 +142,21 @@ func (c *Compiler) Transverse(node *Node, callback func(node *Node) (stop bool))
 	f(node)
 }
 
-func (c *Compiler) compileNode(node *Node, context *CompileContext) (*Compiled, error) {
+func (c *Compiler) compileNode(node *Node, context *_PrevContext) (*Compiled, error) {
 	return c.compile([]*Node{node}, context)
 }
 
 // compile compile internal
-func (c *Compiler) compile(nodeList []*Node, context *CompileContext) (*Compiled, error) {
-	err := c.processNodes(nodeList, context)
-	if err != nil {
+func (c *Compiler) compile(nodeList []*Node, context *_PrevContext) (*Compiled, error) {
+	if err := c.processNodes(nodeList, context); err != nil {
 		return nil, err
 	}
 	compiled := c.extractCompiled(nodeList)
 	return compiled, nil
 }
 
-// faz a compilação de todos os Node da lista
-func (c *Compiler) processNodes(nodeList []*Node, prevContext *CompileContext) error {
+// processNodes faz a compilação do nodeList
+func (c *Compiler) processNodes(nodeList []*Node, prevContext *_PrevContext) error {
 	for _, node := range nodeList {
 		if node.Type == ElementNode {
 			attrs := node.Attributes
@@ -176,7 +183,7 @@ func (c *Compiler) processNodes(nodeList []*Node, prevContext *CompileContext) e
 					node.AttrList = []*Attribute{{Name: token}}
 				}
 
-				childNodes := getChildNodes(node)
+				childNodes := node.GetChildNodes()
 				if childNodes != nil || len(childNodes) > 0 {
 					err = c.processNodes(childNodes, prevContext)
 					if err != nil {
@@ -238,7 +245,7 @@ func (c *Compiler) extractCompiled(nodeList []*Node) *Compiled {
 		log.Fatal(err)
 	}
 
-	// aqui faz a segunda fase do processamento, busca os tokens e gera o executável final
+	// here it does the second phase of processing, fetches the tokens and generates the final executable
 	matches := RegexExecAll(syntaxDynamicIndexRegex, htmlStr)
 
 	compiled := &Compiled{}
@@ -278,13 +285,13 @@ func (c *Compiler) extractCompiled(nodeList []*Node) *Compiled {
 // is responsible for inlining directive templates as well as terminating the application
 // of the directives if the terminal directive has been reached.
 func (c *Compiler) compileDirectives(
-	directives []*Directive, node *Node, attrs *Attributes, prevContext *CompileContext,
+	directives []*Directive, node *Node, attrs *Attributes, prevContext *_PrevContext,
 ) (*DynamicDirectives, error) {
 
 	terminalPriority := math.MinInt
 
 	if prevContext == nil {
-		prevContext = &CompileContext{}
+		prevContext = &_PrevContext{}
 	}
 
 	tag := ""
@@ -338,8 +345,8 @@ func (c *Compiler) compileDirectives(
 			if transclude == "element" {
 				terminalPriority = directive.Priority
 
-				contentCompiled, err := c.compileNode(node, &CompileContext{
-					maxPriority: terminalPriority,
+				contentCompiled, err := c.compileNode(node, &_PrevContext{
+					MaxPriority: terminalPriority,
 					// ignoreDirective
 					// transcludeFn
 				})
@@ -348,16 +355,16 @@ func (c *Compiler) compileDirectives(
 				}
 				dynamic.transcludeSlots = map[string]*Compiled{"*": contentCompiled}
 
-				// childTranscludeFn = return compile($compileNodes, transcludeFn, maxPriority, ignoreDirective, previousCompileContext);
+				// childTranscludeFn = return compile($compileNodes, transcludeFn, MaxPriority, ignoreDirective, previousCompileContext);
 
 			} else {
 				if transclude == true {
-					childNodes := getChildNodes(node)
+					childNodes := node.GetChildNodes()
 					if childNodes != nil || len(childNodes) > 0 {
 						c.processNodes(childNodes, prevContext)
 					}
-					contentCompiled, err := c.compileNode(c.ExtractRoot(node), &CompileContext{
-						maxPriority: terminalPriority,
+					contentCompiled, err := c.compileNode(c.ExtractRoot(node), &_PrevContext{
+						MaxPriority: terminalPriority,
 						// ignoreDirective
 						// transcludeFn
 						// {needsNewScope: directive.$$isolateScope || directive.$$newScope}
@@ -427,17 +434,4 @@ func (c *Compiler) replaceNodeByDynamic(node *Node, dynamic Dynamic) {
 	// remove referencias para filhos
 	node.FirstChild = nil
 	node.LastChild = nil
-}
-
-func (c *Compiler) IsComponente(child *Node) bool {
-	// @TODO: Descobir se o node é um Componente registrado
-	return false
-}
-
-func getChildNodes(node *Node) []*Node {
-	var childNodes []*Node
-	for child := node.FirstChild; child != nil; child = child.NextSibling {
-		childNodes = append(childNodes, child)
-	}
-	return childNodes
 }
