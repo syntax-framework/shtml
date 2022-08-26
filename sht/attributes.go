@@ -100,7 +100,7 @@ func (a *Attributes) AddClass(value string) {
 		}
 	}
 	if changed {
-		a.Set("class", current+buf.String())
+		a.Set("class", strings.TrimSpace(current+buf.String()))
 	}
 }
 

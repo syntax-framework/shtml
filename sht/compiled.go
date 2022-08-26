@@ -32,11 +32,11 @@ func (c *Compiled) Exec(scope *Scope) *Rendered {
 			out.Dynamics[i] = result
 		} else if value, ok := result.(string); ok {
 			out.Dynamics[i] = value
-		} else if rendered, isRendered := result.(*Rendered); isRendered {
+		} else if rendered, isRendered := result.(*Rendered); isRendered && rendered != nil {
 			out.Dynamics[i] = rendered
 			out.Assets = append(out.Assets, rendered.Assets...)
 			rendered.Assets = nil
-		} else if compiled, isCompiled := result.(*Compiled); isCompiled {
+		} else if compiled, isCompiled := result.(*Compiled); isCompiled && compiled != nil {
 			out.Dynamics[i] = compiled.Exec(scope)
 		}
 	}

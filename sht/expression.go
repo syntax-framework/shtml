@@ -105,19 +105,18 @@ func Interpolate(text string) (*Compiled, error) {
 	// Allows you to discover the number of open braces within an expression
 	innerBrackets := 0
 
-	// Is processing an expression (started with "!{" or "#{")
+	// Is processing an expression (started with "{" or "!{")
 	inExpression := false
 
-	// String Unescaped: !{riskyBusiness}
-	// String Escaped:   #{expression}
-	isEscaped := true
+	//   Safe:  {expr}
+	// Unsafe: !{expr}
+	isSafeSignal := true
 
 	content := &bytes.Buffer{}
 
-	prev := ' '
-	z := strings.NewReader(text)
+	reader := strings.NewReader(text)
 	for {
-		currChar, _, err := z.ReadRune()
+		currChar, _, err := reader.ReadRune()
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -125,56 +124,67 @@ func Interpolate(text string) (*Compiled, error) {
 				return nil, err
 			}
 		}
-		nextChar, _, err := z.ReadRune()
+		nextChar, _, err := reader.ReadRune()
 		if err != nil && err != io.EOF {
 			return nil, err
 		}
 
 		if err != io.EOF {
-			err = z.UnreadRune()
+			// unred nextChar
+			err = reader.UnreadRune()
 			if err != nil {
 				return nil, err
 			}
 		}
 
 		if !inExpression {
-			if (currChar == '!' || currChar == '#') && nextChar == '{' {
-				if content.Len() > 0 {
-					compiled.static = append(compiled.static, content.String())
-				}
-				isEscaped = currChar == '#'
+			if currChar == '{' || (currChar == '!' && nextChar == '{') {
+				// {value} or !{value}
+				compiled.static = append(compiled.static, content.String())
+
 				inExpression = true
+				isSafeSignal = currChar == '{'
+
 				content = &bytes.Buffer{}
+			} else {
+				content.WriteRune(currChar)
 			}
 		} else {
-			if currChar == '{' && prev == '\\' {
-				innerBrackets++
-			} else if currChar == '}' {
-				if innerBrackets > 0 {
-					innerBrackets--
-				} else {
-					inExpression = false
-					value := content.String()[2:]
-					program, err := ParseExpression(value)
-					if err != nil {
-						log.Fatal(err)
-					}
-
-					if isEscaped {
-						compiled.dynamics = append(compiled.dynamics, &DynamicInterpolateEscaped{expression: program})
-					} else {
-						compiled.dynamics = append(compiled.dynamics, &DynamicInterpolate{expression: program})
-					}
-
-					prev = currChar
-					content = &bytes.Buffer{}
-					continue
+			if currChar == '{' {
+				// is not first "{"
+				if content.Len() > 0 {
+					innerBrackets++
+					content.WriteRune(currChar)
 				}
+			} else {
+				if currChar == '}' {
+					if innerBrackets > 0 {
+						innerBrackets--
+					} else {
+						inExpression = false
+
+						value := content.String()
+						program, programErr := ParseExpression(value)
+						if programErr != nil {
+							return nil, programErr
+						}
+
+						if isSafeSignal {
+							compiled.dynamics = append(compiled.dynamics, &DynamicInterpolateEscaped{expression: program})
+						} else {
+							compiled.dynamics = append(compiled.dynamics, &DynamicInterpolate{expression: program})
+						}
+
+						//prev = currChar
+						content = &bytes.Buffer{}
+						continue
+					}
+				}
+				content.WriteRune(currChar)
 			}
 		}
 
-		prev = currChar
-		content.WriteRune(currChar)
+		//prev = currChar
 	}
 
 	compiled.static = append(compiled.static, content.String())

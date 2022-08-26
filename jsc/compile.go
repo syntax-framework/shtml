@@ -16,6 +16,8 @@ var errorCompJsRedeclaration = sht.Err(
 	"SyntaxError: Identifier has already been declared.", "Identifier: %s", "Context: %s", "Component: %s",
 )
 
+// @TODO: Usar https://github.com/evanw/esbuild?
+
 // jsWatchInvalidateBlock
 //
 // ALGORITMO DE _$watches e _$invalidate
@@ -108,49 +110,53 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 		}
 	}
 
-	// unique node identifier.
+	// Unique node identifier (#id or .class-name)
 	// @TODO: make global to prevent a node from having more than one identifier
 	getNodeIdentifier := sht.CreateNodeIdentifier(sequence)
 
-	//
-	//  Obs. Não é necessário interceptar as atribuições de nível global pois entende-se que essa atribuição está sendo
-	//  realizada na instanciação do componente, portanto, os observers já irão receber expr valor correto neste momento
-	// @TODO: parse content to get all watch variables (Ex. {{time}}, {{count}}, <element js-hide="count == 0">)
-
-	// all script global variables being used
+	// All script global variables being used
 	contextVariables := &sht.IndexedMap{}
 
 	// All expressions created in the code are idexed, to allow removing duplicates
+	// JS: Array<key: expressionIndex, value: Function>
 	expressions := &sht.IndexedMap{}
 
-	// All html attributes referencied in watchers
-	attributes := &sht.IndexedMap{}
+	// The elements used by the script and which therefore must be referenced in the code
+	// JS: Array<key: elementIndex, value: string(#id|.class-name)>
+	elements := &sht.IndexedMap{}
 
-	// Html events
+	// All html attributeNames referencied in writers (Ex. src, href, value)
+	// JS: Array<key: attributeIndex, value: string>
+	attributeNames := &sht.IndexedMap{}
+
+	// All html events referenced in code (Ex. click, change)
+	// JS: Array<key: eventNameIndex, value: string>
+	eventNames := &sht.IndexedMap{}
+
+	// Mapping of html events that are fired in code
+	// JS: Array<[elementIndex, eventNameIndex, expressionIndex]>
+	events := &sht.IndexedMap{}
+
+	// A writer applies the result of an expression to something (text, attribute, component, directive), has three forms
 	//
-	// Source: <element onclick="onClickFn(e.MouseX)">)
-	// Transpiled to JS: (e) => { onClickFn(e.MouseX) }
-	idxEventNames := &sht.IndexedMap{}    // click, change
-	idxEventHandlers := &sht.IndexedMap{} // console.log(e.MouseX)
-	idxEvents := &sht.IndexedMap{}        // _$on(_$event_names[0], _$elements[1], _$event_handlers[1])
+	//  A) JS: Array<key: writerIndex, value: [elementIndex, expressionIndex]>
+	//    Apply the result of an expression to an element ($(el).innerHtml = value)
+	//
+	//  B) JS: Array<key: writerIndex, value: [elementIndex, attributeIndex, expressionIndex]>
+	//    Applies the result of the expression to an attribute ($(el).setAttribute(value))
+	//
+	//  C) JS: Array<key: writerIndex, value: [elementIndex, attributeIndex, [string, expressionIndex, string, ...]]>
+	//    Apply the (dynamic) template to an attribute, allowing you to check for later changes to the attribute
+	//    $(el).setAttribute(parse(template))
+	writers := &sht.IndexedMap{}
 
 	// All watches. Represent expressions that will react when a variable changes.
-	//    - Text interpolation block
-	//      - <element>${value} #{value} ${value + other}</element>
-	//      - <element class="class-a ${myVar == 3 ? 'new-class' : ''}" />
-	//    - js directives or control blocks
-	//      - <element if="${myVar == 3}" />
-	//      - <if cond="${myVar == 3}">
+	// JS: Array<key: _, value: [type, variableIndex, expressionIndex|writerIndex]>
+	//    type 0 = action(expressionIndex)
+	//    type 1 = schedule(writerIndex)
 	watchers := &sht.IndexedMap{}
 
-	// identifies which watches are candidates for replay when a variable changes
-	// [ $varIndex = [$watchIndexA, $watchIndexB]]
-	watchersByVar := map[int][]int{}
-
-	// Os elementos usados pelo script e que portanto devem ser referenciados no código
-	elementIdentifiers := &sht.IndexedMap{}
-
-	// parse component params
+	// parse component params (<element param-name="type" client-param-name="type">)
 	var componentParams *NodeComponentParams
 	if nodeParentIsComponent {
 		if componentParams, err = ParseComponentParams(nodeParent); err != nil {
@@ -158,16 +164,16 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 		}
 	}
 
-	// parse references to elements within the template
-	references, refErr := ParseReferences(nodeParent, t, elementIdentifiers)
-	if refErr != nil {
-		return nil, refErr
+	// parse references to elements within the template (<element ref="myJsVariable">)
+	references, referenceErr := ParseReferences(nodeParent, t)
+	if referenceErr != nil {
+		return nil, referenceErr
 	}
 
 	if len(references) > 0 {
 		// initialize ref elements class id
 		for _, reference := range references {
-			elementIdentifiers.Add(getNodeIdentifier(reference.Node))
+			elements.Add(getNodeIdentifier(reference.Node))
 
 			// validates reference names against parameter names, avoids double definition of variables
 			if componentParams != nil {
@@ -183,14 +189,13 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 	var jsSource string
 	if componentParams != nil && len(componentParams.ClientParams) > 0 {
 		compJsParams := &bytes.Buffer{}
-		compJsParams.WriteString("\n    // parameters (define)")
-		compJsParams.WriteString("\n    let _$params = $.params;\n")
+		compJsParams.WriteString("\n    // parameters")
+		compJsParams.WriteString("\n    const _$params = $.params;\n")
 		for _, jsParam := range componentParams.ClientParams {
 			name := jsParam.Name
 			compJsParams.WriteString(fmt.Sprintf("    let %s = _$params['%s'];\n", name, name))
 		}
-		compJsParams.WriteString("\n    // parameters (watch)")
-		compJsParams.WriteString("\n    $.onChangeParams(() => {\n")
+		compJsParams.WriteString("\n    $.p(() => {\n")
 		for _, jsParam := range componentParams.ClientParams {
 			name := jsParam.Name
 			compJsParams.WriteString(fmt.Sprintf("      %s = _$params['%s'];\n", name, name))
@@ -217,15 +222,23 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 		}
 	}
 
-	contextJsAst, globalJsAstErr := js.Parse(parse.NewInputString(jsSource), js.Options{})
-	if globalJsAstErr != nil {
-		err = globalJsAstErr // @TODO: Custom error or Warning
+	contextJsAst, contextJsAstErr := js.Parse(parse.NewInputString(jsSource), js.Options{})
+	if contextJsAstErr != nil {
+		err = contextJsAstErr // @TODO: Custom error or Warning
 		return
 	}
 	contextAstScope := &contextJsAst.BlockStmt.Scope
 
 	// @TODO: fork the project https://github.com/tdewolff/parse/tree/master/js and add feature to keep original formatting
 	jsSource = contextJsAst.JS()
+
+	// @DEPRECATED
+	idxEventHandlers := &sht.IndexedMap{}
+
+	// @DEPRECATED
+	// identifies which watches are candidates for replay when a variable changes
+	// [ $varIndex = [$watchIndexA, $watchIndexB]]
+	watchersByVar := map[int][]int{}
 
 	// 1 - Map all watch expressions. After that, all the variables that are being watched will have been mapped
 	expressionsErr := (&ExpressionsParser{
@@ -235,10 +248,13 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 		ContextAst:         contextJsAst,
 		ContextAstScope:    contextAstScope,
 		ContextVariables:   contextVariables,
-		ElementIdentifiers: elementIdentifiers,
+		Elements:           elements,
+		Events:             events,
+		EventNames:         eventNames,
+		AttributeNames:     attributeNames,
 		Expressions:        expressions,
+		Writers:            writers,
 		Watchers:           watchers,
-		BindedAttributes:   attributes,
 		WatchersByVar:      watchersByVar,
 		NodeIdentifierFunc: getNodeIdentifier,
 	}).Parse()
@@ -263,7 +279,7 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 				// html events
 				eventJsCode := strings.TrimSpace(attr.Value)
 
-				elementIdentifiers.Add(getNodeIdentifier(child))
+				elements.Add(getNodeIdentifier(child))
 
 				if strings.HasPrefix(eventJsCode, "js:") {
 					// If it has the prefix "js:", it does not process
@@ -359,10 +375,10 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 
 				// add event handler
 				// _$on(_$event_names[0], _$elements[1], _$event_handlers[5]);
-				eventIdx := strconv.Itoa(idxEventNames.Add(strings.Replace(attrNameNormalized, "on", "", 1)))
+				eventIdx := strconv.Itoa(eventNames.Add(strings.Replace(attrNameNormalized, "on", "", 1)))
 				handlerIdx := strconv.Itoa(idxEventHandlers.Add(eventJsCode))
-				elementIdx := strconv.Itoa(elementIdentifiers.Add(getNodeIdentifier(child)))
-				idxEvents.Add(
+				elementIdx := strconv.Itoa(elements.Add(getNodeIdentifier(child)))
+				events.Add(
 					"[" + eventIdx + ", " + elementIdx + ", " + handlerIdx + "]",
 				)
 			}
@@ -387,7 +403,7 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 	} else {
 		var anchorId string
 		if nodeScript != nil {
-			nodeScript.Attributes.Set("data-syntax-s", "")
+			//nodeScript.Attributes.Set("data-syntax-s", "")
 			anchorId = getNodeIdentifier(nodeScript)
 		} else {
 			anchorScript := &sht.Node{
@@ -398,7 +414,7 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 				Column:     nodeParent.Column,
 				Attributes: &sht.Attributes{Map: map[string]*sht.Attribute{}},
 			}
-			anchorScript.Attributes.Set("data-syntax-s", "")
+			//anchorScript.Attributes.Set("data-syntax-s", "")
 			nodeParent.AppendChild(anchorScript)
 			anchorId = getNodeIdentifier(anchorScript)
 		}
@@ -422,9 +438,9 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 	bjs.WriteString("\n  return {\n    f: _$file,\n    l: _$line,")
 
 	// Elements class ids
-	if !elementIdentifiers.IsEmpty() {
+	if !elements.IsEmpty() {
 		bjs.WriteString("\n    e: [ /* $elements */")
-		for i, id := range elementIdentifiers.ToArray() {
+		for i, id := range elements.ToArray() {
 			if i > 0 {
 				bjs.WriteString(",")
 			}
@@ -434,27 +450,39 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 	}
 
 	// Attributes used
-	if !attributes.IsEmpty() {
-		bjs.WriteString("\n    t : [")
-		for i, name := range attributes.ToArray() {
+	if !attributeNames.IsEmpty() {
+		bjs.WriteString("\n    a : [")
+		for i, name := range attributeNames.ToArray() {
 			if i > 0 {
 				bjs.WriteString(", ")
 			}
 			bjs.WriteString("'" + name.(string) + "'")
 		}
-		bjs.WriteString("] /* $attributes */,")
+		bjs.WriteString("] /* $attributeNames */,")
 	}
 
 	// Event names
-	if !idxEventNames.IsEmpty() {
-		bjs.WriteString("\n    o : [")
-		for i, name := range idxEventNames.ToArray() {
+	if !eventNames.IsEmpty() {
+		bjs.WriteString("\n    n : [")
+		for i, name := range eventNames.ToArray() {
 			if i > 0 {
 				bjs.WriteString(", ")
 			}
 			bjs.WriteString("'" + name.(string) + "'")
 		}
 		bjs.WriteString("] /* $event_names */,")
+	}
+
+	if !events.IsEmpty() {
+		bjs.WriteString("\n    o : [ /* $events */")
+		// _$on(_$event_names[0], _$elements[5], _$event_handlers[1]);
+		for j, jsEventHandler := range events.ToArray() {
+			if j > 0 {
+				bjs.WriteString(", ")
+			}
+			bjs.WriteString("\n      " + jsEventHandler.(string))
+		}
+		bjs.WriteString("\n    ],")
 	}
 
 	// watchers
@@ -465,37 +493,6 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 				bjs.WriteString(",")
 			}
 			bjs.WriteString("\n      " + watcher.(string))
-		}
-		bjs.WriteString("\n    ],")
-	}
-
-	// watchers by vars
-	if !contextVariables.IsEmpty() {
-		bjs.WriteString("\n    v: [ /* $watchers_by_vars */")
-		for i, gvar := range contextVariables.ToArray() {
-			jsVar := gvar.(*js.Var)
-			if i > 0 {
-				bjs.WriteString(", ")
-			}
-			bjs.WriteString("\n      [")
-			if watchersIds, exists := watchersByVar[i]; exists {
-				for j, watcherId := range watchersIds {
-					if j > 0 {
-						bjs.WriteString(", ")
-					}
-					bjs.WriteString(strconv.Itoa(watcherId))
-				}
-			}
-			bjs.WriteString("] /* " + jsVar.JS() + " */")
-		}
-		bjs.WriteString("\n    ],")
-	}
-
-	if !idxEvents.IsEmpty() {
-		bjs.WriteString("\n    a : [ /* $events */")
-		// _$on(_$event_names[0], _$elements[5], _$event_handlers[1]);
-		for _, jsEventHandler := range idxEvents.ToArray() {
-			bjs.WriteString("\n      " + jsEventHandler.(string))
 		}
 		bjs.WriteString("\n    ],")
 	}
@@ -544,7 +541,7 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 		for _, ref := range references {
 			isComponent := false
 
-			elementIdx := strconv.Itoa(elementIdentifiers.Get(getNodeIdentifier(ref.Node)))
+			elementIdx := strconv.Itoa(elements.Get(getNodeIdentifier(ref.Node)))
 
 			// if is component
 			bjs.WriteString("      " + ref.VarName + " = ")

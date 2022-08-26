@@ -7,6 +7,11 @@ type TemplateSystem struct {
 	Directives *Directives
 }
 
+// Register a global directive
+func (s *TemplateSystem) Register(directive *Directive) {
+	s.Directives.Add(directive)
+}
+
 // Load load an html file
 func (s *TemplateSystem) Load(filepath string) (string, error) {
 	return s.Loader(filepath)

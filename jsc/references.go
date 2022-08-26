@@ -23,7 +23,7 @@ type JsNodeReference struct {
 }
 
 // ParseReferences handles references made available to JS (<element ref="myJsVariable">)
-func ParseReferences(node *sht.Node, t *sht.Compiler, elementClassIds *sht.IndexedMap) ([]*JsNodeReference, error) {
+func ParseReferences(node *sht.Node, t *sht.Compiler) ([]*JsNodeReference, error) {
 	// references to elements within the template
 	refVarNodes := map[string]*sht.Node{}
 

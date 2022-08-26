@@ -250,7 +250,49 @@ func GetContextFunctionBodyExpr(contextAst *js.AST, funcRef *js.Var) *js.BlockSt
 	return nil
 }
 
-//OpenParenToken              // (
-//CloseParenToken             // )
-//CommaExpr
-//GroupExpr
+// IsContextLetOrVarDecl checks if the variable is a "var" or "let" declaration in the global context
+func IsContextLetOrVarDecl(variable *js.Var, contextAst *js.AST) (bool, *js.BindingElement) {
+	for _, stmt := range contextAst.BlockStmt.List {
+		if jsVarDecl, isVarDecl := stmt.(*js.VarDecl); isVarDecl {
+			if jsVarDecl.TokenType == js.LetToken || jsVarDecl.TokenType == js.VarToken {
+				for _, item := range jsVarDecl.List {
+					if item.Binding == variable {
+						return true, &item
+					}
+					if jsBindingArray, isBindingArray := item.Binding.(*js.BindingArray); isBindingArray {
+						for _, bitem := range jsBindingArray.List {
+							if bitem.Binding == variable {
+								return true, &bitem
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return false, nil
+}
+
+// IsContextSingleLetOrVarReference checks if the given expression refers to a single variable defined in the global scope
+func IsContextSingleLetOrVarReference(ast *js.AST, contextAst *js.AST) (bool, *js.Var) {
+	list := ast.BlockStmt.List
+	if list != nil && len(list) == 1 {
+		if jsExprStmt, isExprStmt := list[0].(*js.ExprStmt); isExprStmt && jsExprStmt != nil {
+			if jsVar, isVar := jsExprStmt.Value.(*js.Var); isVar && jsVar != nil {
+				if isDeclared, jsVarGlobal := IsDeclaredOnScope(jsVar, &contextAst.Scope); isDeclared {
+					if isLetOrVar, binding := IsContextLetOrVarDecl(jsVarGlobal, contextAst); isLetOrVar {
+						// *js.LiteralExpr
+						switch binding.Default.(type) {
+						case *js.ArrowFunc, *js.FuncDecl:
+							return false, nil
+						default:
+							return true, jsVarGlobal
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return false, nil
+}

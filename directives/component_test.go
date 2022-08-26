@@ -70,6 +70,57 @@ func Test_Component_JS_Param_Invalid_Reference(t *testing.T) {
 	testForErrorCode(t, template, "component:param:js:ref")
 }
 
+// client-param is referencing a non-existent parameter
+func Test_Two_Way_Data_Binding(t *testing.T) {
+	template := `
+    <component name="test">
+      <input type="text" value="${varx}" />
+      <input type="text" value="${vary}" />
+      <input type="text" value="${myVariable1}" />
+      <input type="text" value="${myVariable2}" />
+      <input type="text" value="${myVariable3}" />
+      <input type="text" value="${variableX}" />
+      <input type="text" value="${myFunction1}" />
+      <input type="text" value="${myFunction2}" />
+      <input type="text" value="${myFunction3}" />
+      <input type="text" value="${unknownVariable}" />
+
+      <script>
+        let myVariable1 = "";
+        var myVariable2 = "";
+        let variableX;
+        let [varx, vary] = [25, 'aoha'];
+        const myVariable3 = "";
+        let myFunction1 = () => {};
+        var myFunction2 = () => {};
+        const myFunction3 = () => {};
+
+        // onChange
+        validate(myVariable1, (value) => {
+          return true
+        })
+
+        // to STATE
+        set(myVariable1, (value) => {
+          return Number.parseInt(value)
+        })
+        
+        // to DOM
+        get(myVariable1, (value) => {
+          return value.ToFixed(2)
+        })
+      </script>
+    </component>
+  `
+	template = sht.TestUnindentedTemplate(template)
+	compiler := sht.NewCompiler(&sht.TemplateSystem{Directives: testGDs.NewChild()})
+	compiled, err := compiler.Compile(template, "template.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	println(compiled)
+}
+
 // Expressions with Side Effect in text interpolation block are not allowed.
 func Test_Should_Not_Allow_Side_Effect_in_Interpolation(t *testing.T) {
 	var tests = []string{

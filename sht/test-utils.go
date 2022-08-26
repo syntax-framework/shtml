@@ -14,7 +14,7 @@ func TestUnindentedTemplate(template string) string {
 }
 
 // TestCompile compiles a template and already tests the expected output
-func TestCompile(t *testing.T, template string, static []string, globalDirectives *Directives) *Compiled {
+func TestCompile(t *testing.T, template string, static []string, globalDirectives *Directives) (*Compiled, *Compiler) {
 	template = TestUnindentedTemplate(template)
 	compiler := NewCompiler(&TemplateSystem{Directives: globalDirectives.NewChild()})
 	compiled, err := compiler.Compile(template, "template.html")
@@ -26,11 +26,11 @@ func TestCompile(t *testing.T, template string, static []string, globalDirective
 			t.Errorf("compiler.Compile(template) | invalid compiled.Static[%d]\n   actual: %q\n expected: %q", i, actual, expected)
 		}
 	}
-	return compiled
+	return compiled, compiler
 }
 
 // TestRender renders a compiled and already tests the expected result
-func TestRender(t *testing.T, compiled *Compiled, values map[string]interface{}, expected string) {
+func TestRender(t *testing.T, compiled *Compiled, values map[string]interface{}, expected string) (*Rendered, *Scope) {
 	expected = TestUnindentedTemplate(expected)
 
 	scope := NewRootScope()
@@ -46,16 +46,15 @@ func TestRender(t *testing.T, compiled *Compiled, values map[string]interface{},
 	if actual := out.String(); actual != expected {
 		t.Errorf("compiled.Write(*bytes.Buffer) | invalid output\n   actual: %q\n expected: %q", actual, expected)
 	}
+	return rendered, scope
 }
 
-func TestTemplate(
-	t *testing.T, template string, values map[string]interface{}, expected string, globalDirectives *Directives,
-) {
+func TestTemplate(t *testing.T, template string, values map[string]interface{}, expected string, directives *Directives) (*Rendered, *Scope) {
 	template = TestUnindentedTemplate(template)
-	compiler := NewCompiler(&TemplateSystem{Directives: globalDirectives.NewChild()})
+	compiler := NewCompiler(&TemplateSystem{Directives: directives.NewChild()})
 	compiled, err := compiler.Compile(template, "template.html")
 	if err != nil {
 		t.Fatal(err)
 	}
-	TestRender(t, compiled, values, expected)
+	return TestRender(t, compiled, values, expected)
 }

@@ -39,7 +39,7 @@ func (i *Interpolation) Debug() string {
 // newText == "Hello _j$_i15151ffacb"
 // interpolations == {"_j$_i15151ffacb": {Expression: "name", isScape: true}}
 // exp.Exec({name:'Syntax'}).String() == "Hello Syntax!"
-func Interpolate(text string, sequence *sht.Sequence) (string, map[string]Interpolation, error) {
+func Interpolate(text string, sequence *sht.Sequence) (string, map[string]*Interpolation, error) {
 
 	if !strings.ContainsRune(text, '{') || !strings.ContainsAny(text, "$#") {
 		return text, nil, nil
@@ -48,12 +48,12 @@ func Interpolate(text string, sequence *sht.Sequence) (string, map[string]Interp
 	// always trim, is still valid html. Syntax has no intention of working with other media
 	text = strings.TrimSpace(text)
 
-	interpolations := map[string]Interpolation{}
+	interpolations := map[string]*Interpolation{}
 
 	// Allows you to discover the number of open braces within an Expression
 	innerBrackets := 0
 
-	// Is processing an Expression (started with "!{" or "#{")
+	// Is processing an Expression (started with "${" or "#{")
 	inExpression := false
 
 	//   Safe: ${expr}
@@ -89,12 +89,12 @@ func Interpolate(text string, sequence *sht.Sequence) (string, map[string]Interp
 		}
 
 		if !inExpression {
-			// ${value} or #{value}
 			if (currChar == '$' || currChar == '#') && nextChar == '{' {
+				// ${value} or #{value}
 				inExpression = true
 				isSafeSignal = currChar == '$'
 
-				expressionId = sequence.NextHash("_")
+				expressionId = sequence.NextHash("")
 				content.WriteString(expressionId)
 
 				expressionContent = &bytes.Buffer{}
@@ -114,7 +114,7 @@ func Interpolate(text string, sequence *sht.Sequence) (string, map[string]Interp
 					} else {
 						inExpression = false
 
-						interpolations[expressionId] = Interpolation{
+						interpolations[expressionId] = &Interpolation{
 							Expression:   expressionContent.String(),
 							IsSafeSignal: isSafeSignal,
 						}
@@ -128,7 +128,7 @@ func Interpolate(text string, sequence *sht.Sequence) (string, map[string]Interp
 
 	if inExpression {
 		// invalid content, will probably pop JS error
-		interpolations[expressionId] = Interpolation{
+		interpolations[expressionId] = &Interpolation{
 			Expression:   expressionContent.String(),
 			IsSafeSignal: isSafeSignal,
 		}

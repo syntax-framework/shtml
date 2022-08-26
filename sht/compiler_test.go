@@ -4,10 +4,39 @@ import (
 	"testing"
 )
 
+func Test_Page_Directive(t *testing.T) {
+
+	template := `
+    <page title="My First Syntax Page - {title}" layout="{layout}"/>
+    <div>{valueOne ? 'value-true' : 'value-false'}</div>
+  `
+
+	static := []string{
+		"<page",
+		"></page><div>",
+		"</div>",
+	}
+
+	expected := `<div>value-true</div>`
+
+	values := map[string]interface{}{
+		"valueOne": true,
+		"title":    "My Page Title",
+		"layout":   "custom.html",
+	}
+
+	directives := &Directives{}
+	//directives.Add(PageDirective)
+
+	compiled, _ := TestCompile(t, template, static, directives)
+	rendered, _ := TestRender(t, compiled, values, expected)
+	println(rendered)
+}
+
 func Test_Interpolation(t *testing.T) {
 
 	template := `
-    <div class="out !{valueOne ? 'class-true' : 'class-false' }">
+    <div class="out {valueOne ? 'class-true' : 'class-false'}">
       !{valueOne ? 'value-true' : 'value-false' }
       Other text
       !{valueTwo ? 'value-true' : 'value-false' }
@@ -47,5 +76,6 @@ func Test_Interpolation(t *testing.T) {
 		"valueTwo": false,
 	}
 
-	TestRender(t, TestCompile(t, template, static, &Directives{}), values, expected)
+	compiled, _ := TestCompile(t, template, static, &Directives{})
+	TestRender(t, compiled, values, expected)
 }

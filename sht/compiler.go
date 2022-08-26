@@ -232,12 +232,12 @@ func (c *Compiler) extractCompiled(nodeList []*Node) *Compiled {
 	for _, node := range nodeList {
 		node.Parent = root
 		if prev == nil {
-			prev = node
 			root.FirstChild = node
 		} else {
 			prev.NextSibling = node
 			node.PrevSibling = prev
 		}
+		prev = node
 	}
 
 	htmlStr, err := root.Render()

@@ -3,6 +3,7 @@ package sht
 import (
 	"bytes"
 	"crypto/md5"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"github.com/cespare/xxhash"
@@ -73,12 +74,16 @@ type Sequence struct {
 	seq  int
 }
 
+const numbers = "0123456789"
+
 func (s *Sequence) NextHash(prefix string) string {
-	if prefix == "" {
+	s.seq++
+	hash := HashXXH64(s.Salt + strconv.Itoa(s.seq))
+	if prefix == "" && strings.Contains(numbers, hash[:1]) {
+		// add _ if hash starts with number
 		prefix = "_"
 	}
-	s.seq++
-	return prefix + HashXXH64(s.Salt+strconv.Itoa(s.seq))
+	return prefix + hash
 }
 
 func (s *Sequence) NextInt() int {
@@ -239,11 +244,20 @@ func HashMD5(text string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// HashXXH64 computing the XXH64 checksum of strings
-func HashXXH64(text string) string {
+// HashXXH64Hex computing the XXH64 checksum of strings
+func HashXXH64Hex(text string) string {
 	h := xxhash.New()
 	h.Write([]byte(text))
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// HashXXH64 Make a fingerprint. Compute a non-cryptographic XXH64 checksum of strings
+//
+// Encoded using Base64 URLSafe
+func HashXXH64(text string) string {
+	h := xxhash.New()
+	h.Write([]byte(text))
+	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }
 
 func CreateBoolMap(arr []string) map[string]bool {

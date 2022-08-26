@@ -230,7 +230,7 @@ func CreateNodeIdentifier(sequence *Sequence) func(node *Node) string {
 			cache[other] = identifier
 		} else {
 			// generate a class "identifier" (unique class)
-			identifier = sequence.NextHash("_")
+			identifier = sequence.NextHash("")
 			cache[other] = identifier
 			other.Attributes.AddClass(identifier)
 		}

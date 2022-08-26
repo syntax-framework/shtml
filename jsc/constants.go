@@ -13,9 +13,9 @@ type Javascript struct {
 
 // HtmlEventsPush list of events that are enabled by default to push to server
 var HtmlEventsPush = sht.CreateBoolMap([]string{
-	// Form Event BindedAttributes
+	// Form Event AttributeNames
 	"onblur", "onchange", "oncontextmenu", "onfocus", "oninput", "oninvalid", "onreset", "onsearch", "onselect", "onsubmit",
-	// Mouse Event BindedAttributes
+	// Mouse Event AttributeNames
 	"onclick", "ondblclick", "onmousedown", "onmousemove", "onmouseout", "onmouseover", "onmouseup", "onwheel",
 })
 

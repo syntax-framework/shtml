@@ -17,7 +17,7 @@ func (l DirectivesByPriority) Less(i, j int) bool {
 		}
 		return false
 	}
-	return a.Priority < b.Priority
+	return a.Priority > b.Priority
 }
 func (l DirectivesByPriority) Swap(i, j int) { l[i], l[j] = l[j], l[i] }
 
