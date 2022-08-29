@@ -5,6 +5,7 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 	"strconv"
+	"strings"
 )
 
 // A NodeType is the type of a Node.
@@ -118,6 +119,23 @@ func (n *Node) Render() (string, error) {
 	return w.String(), nil
 }
 
+// Transverse run callback for node and all its children, until callback returns true
+//
+// @TODO: Alterar o algoritmo para o formato enter() exit().
+// node.transverse(func(enter){ /*before*/ enter() /*after*/  })
+func (n *Node) Transverse(callback func(node *Node) (stop bool)) {
+	var f func(*Node)
+	f = func(o *Node) {
+		if callback(o) {
+			return
+		}
+		for d := o.FirstChild; d != nil; d = d.NextSibling {
+			f(d)
+		}
+	}
+	f(n)
+}
+
 // DebugTag Returns the string representation of the element.
 func (n *Node) DebugTag() string {
 	w := &bytes.Buffer{}
@@ -216,23 +234,33 @@ func (n *Node) toXhtml() *html.Node {
 }
 
 // CreateNodeIdentifier creates a function that when invoked, adds a class so that a node can be identified
-func CreateNodeIdentifier(sequence *Sequence) func(node *Node) string {
+func CreateNodeIdentifier(sequence *Sequence) func(*Node) string {
 	cache := map[*Node]string{}
 
-	return func(other *Node) string {
-		if identifier, exists := cache[other]; exists {
+	return func(node *Node) string {
+		if identifier, exists := cache[node]; exists {
 			return identifier
 		}
 
-		identifier := other.Attributes.Get("id")
-		if identifier != "" {
+		identifier := node.Attributes.Get("id")
+		if identifier == "" {
+			// new "id"
+			identifier = sequence.NextHash()
+			node.Attributes.Set("id", identifier)
 			identifier = "#" + identifier
-			cache[other] = identifier
+			cache[node] = identifier
+		} else if identifier != "" && !strings.ContainsRune(identifier, '{') {
+			// original "id"
+			identifier = "#" + identifier
+			cache[node] = identifier
+		} else if identifier = node.Attributes.Get("data-syntax-id"); identifier != "" {
+			// original "data-syntax-id"
+			cache[node] = identifier
 		} else {
-			// generate a class "identifier" (unique class)
-			identifier = sequence.NextHash("")
-			cache[other] = identifier
-			other.Attributes.AddClass(identifier)
+			// new "data-syntax-id"
+			identifier = sequence.NextHash()
+			cache[node] = identifier
+			node.Attributes.Set("data-syntax-id", identifier)
 		}
 		return identifier
 	}

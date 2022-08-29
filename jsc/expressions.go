@@ -1,35 +1,32 @@
 package jsc
 
 import (
+	"github.com/syntax-framework/shtml/cmn"
 	"github.com/syntax-framework/shtml/sht"
 	"github.com/tdewolff/parse/v2"
 	"github.com/tdewolff/parse/v2/js"
+	"log"
 	"strconv"
 	"strings"
 )
 
-// ExpressionsParser
-//
-
 type ExpressionsParser struct {
 	Node               *sht.Node
-	Compiler           *sht.Compiler
 	Sequence           *sht.Sequence
 	ContextAst         *js.AST
 	ContextAstScope    *js.Scope
-	ContextVariables   *sht.IndexedMap
-	Expressions        *sht.IndexedMap
-	AttributeNames     *sht.IndexedMap
-	EventNames         *sht.IndexedMap
-	Events             *sht.IndexedMap
-	Elements           *sht.IndexedMap
-	Watchers           *sht.IndexedMap
-	Writers            *sht.IndexedMap
-	WatchersByVar      map[int][]int
+	ContextVariables   *cmn.IndexedSet
+	Elements           *cmn.IndexedSet
+	AttributeNames     *cmn.IndexedSet
+	Expressions        *cmn.IndexedSet
+	EventNames         *cmn.IndexedSet
+	Events             *cmn.IndexedSet
+	Writers            *cmn.IndexedSet
+	Watchers           *cmn.IndexedSet
 	NodeIdentifierFunc func(node *sht.Node) string
 }
 
-var errorJsInterpolationSideEffect = sht.Err(
+var errorJsInterpolationSideEffect = cmn.Err(
 	"js:interpolation:sideeffect",
 	"Expressions with Side Effect in text interpolation block or attributes are not allowed.",
 	"Side Effect: (%s)",
@@ -56,10 +53,9 @@ var errorJsInterpolationSideEffect = sht.Err(
 // <input value="${value}"></input>
 func (p *ExpressionsParser) Parse() error {
 	node := p.Node
-	t := p.Compiler
 
 	var err error
-	t.Transverse(node, func(child *sht.Node) (stop bool) {
+	node.Transverse(func(child *sht.Node) (stop bool) {
 		stop = false
 		if child == node {
 			return
@@ -79,7 +75,11 @@ func (p *ExpressionsParser) Parse() error {
 			// busca interpolação nos atributos
 			for attrNameNormalized, attr := range child.Attributes.Map {
 				if strings.HasPrefix(attrNameNormalized, "on") {
-					//
+					if eventErr := p.parseAttributeEvent(child, attr); eventErr != nil {
+						err = eventErr
+						stop = true
+						return
+					}
 				} else {
 					if attributeErr := p.parseAttribute(child, attr); attributeErr != nil {
 						err = attributeErr
@@ -97,6 +97,103 @@ func (p *ExpressionsParser) Parse() error {
 
 // AddDispatcers(interpolationJsAst, contextAstScope, contextVariables, nil)
 
+// parseAttributeEvent handles the html events defined in an element
+func (p *ExpressionsParser) parseAttributeEvent(child *sht.Node, attr *sht.Attribute) error {
+	//contextAst := p.ContextAst
+	contextAstScope := p.ContextAstScope
+	//contextVariables := p.ContextVariables
+	expressions := p.Expressions
+	//attributes := p.AttributeNames
+	elements := p.Elements
+	//watchers := p.Watchers
+	//writers := p.Writers
+	events := p.Events
+	eventNames := p.EventNames
+	getNodeIdentifier := p.NodeIdentifierFunc
+
+	eventJsCode := strings.TrimSpace(attr.Value)
+
+	// eventJsCode = "(e) => { " + eventJsCode + " }"
+	eventJsAst, eventJsAstErr := js.Parse(parse.NewInputString(eventJsCode), js.Options{})
+	if eventJsAstErr != nil {
+		return eventJsAstErr // @TODO: Custom error or Warning
+	}
+
+	eventJsAstScope := eventJsAst.BlockStmt.Scope
+
+	// resolve reference to eventIdx ("e") variable. Ex. "(e) => { myCallback(e.MouseX) }"
+	eventJsAstScope.Parent = eventVariableScope
+	eventJsAstScope.HoistUndeclared()
+	eventVariableScope.Undeclared = nil
+
+	// resolve references to global scope (component <script> source code and client-param-*)
+	undeclaredBackup := contextAstScope.Undeclared
+	eventJsAstScope.Parent = contextAstScope
+	eventJsAstScope.HoistUndeclared()
+	contextAstScope.Undeclared = undeclaredBackup
+
+	stmt := eventJsAst.BlockStmt.List[0]
+	if exprStmt, isExprStmt := stmt.(*js.ExprStmt); isExprStmt {
+		switch exprStmt.Value.(type) {
+		case *js.CallExpr:
+			// <element onclick="someFunc(arg1, arg2, argn...)">
+			callExpr := exprStmt.Value.(*js.CallExpr)
+			if jsVar, isVar := callExpr.X.(*js.Var); isVar {
+				if isDeclared, _ := IsDeclaredOnScope(jsVar, contextAstScope); isDeclared {
+					// is a custom javascript function or "client-param-name"
+					// Ex. <button onclick="onClick()">
+					eventJsCode = "(e) => { " + callExpr.JS() + " }"
+				} else {
+					// considers it to be a remote eventIdx call (push)
+					functionName := jsVar.String()
+					eventName := functionName
+					eventPayload := ""
+					if functionName == "push" {
+						// <button onclick="push('increment', count, time, e.MouseX)" data-ref="mySpan">
+					} else {
+						// <button onclick="increment(count, time, e.MouseX)">
+
+					}
+					eventJsCode = "(e) => { push('" + eventName + "', e, " + eventPayload + ") }"
+				}
+			} else {
+				log.Println("[@TODO] UNKNOWN: what to do? At jsc.parseAttributeEvent(*sht.NodeTest, *sht.Attribute)")
+			}
+		case *js.Var:
+			// <element onclick="someVariable">
+			jsVar := exprStmt.Value.(*js.Var)
+			if isDeclared, _ := IsDeclaredOnScope(jsVar, contextAstScope); isDeclared {
+				// is a custom javascript variable or "client-param-name"
+				// Ex. <button onclick="callback"></button>
+				eventJsCode = "(e) => { " + jsVar.String() + "(e) }"
+			} else {
+				// considers it to be a remote eventIdx call (push)
+				// <button onclick="increment"></button>
+				eventJsCode = "(e) => { push('" + jsVar.String() + "', e) }"
+			}
+		case *js.ArrowFunc:
+			// <element onclick="(e) => doSomething">
+			eventJsCode = exprStmt.Value.(*js.ArrowFunc).JS()
+		case *js.FuncDecl:
+			// <element onclick="function xpto(e){ doSomething() }">
+			eventJsCode = "(e) => { (" + exprStmt.Value.(*js.FuncDecl).JS() + ")() }"
+		default:
+			eventJsCode = "(e) => { " + eventJsCode + " }"
+		}
+	}
+
+	// add event handler
+	elementIndex := strconv.Itoa(elements.Add(getNodeIdentifier(child)))
+	eventNameIndex := strconv.Itoa(eventNames.Add(attr.Normalized[2:]))
+	expressionIndex := strconv.Itoa(expressions.Add(eventJsCode))
+	events.Add(
+		// JS: Array<[elementIndex, eventNameIndex, expressionIndex]>
+		"[ " + elementIndex + ", " + eventNameIndex + ", " + expressionIndex + " ]",
+	)
+
+	return nil
+}
+
 // parseAttribute faz processamento dos bindings de atributos (writers e eventos para two way data binding)
 func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute) error {
 	sequence := p.Sequence
@@ -107,12 +204,10 @@ func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute)
 	attributes := p.AttributeNames
 	elements := p.Elements
 	watchers := p.Watchers
-	//writers := p.Writers
+	writers := p.Writers
 	events := p.Events
 	eventNames := p.EventNames
 	getNodeIdentifier := p.NodeIdentifierFunc
-
-	watchersByVar := p.WatchersByVar
 
 	// Check for expressions (${value} or #{value})
 	//
@@ -136,7 +231,10 @@ func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute)
 	attributeIndex := strconv.Itoa(attributes.Add(attr.Normalized))
 
 	// ['content static 1', expressionIndex, 'content static 2']
-	attrValueParts := strings.ReplaceAll(attrValue, "'", "\\'")
+	isTemplate := true
+	var templateInterpolations []*js.AST
+	// [string, expressionIndex, string, expressionIndex, string ...]
+	templateExpressionsJsArr := "['" + strings.ReplaceAll(attrValue, "'", "\\'") + "']"
 
 	for interpolationId, interpolation := range interpolations {
 
@@ -158,6 +256,7 @@ func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute)
 
 		if hasSideEffect, sideEffectJs := HasSideEffect(interpolationJsAst, contextAst); hasSideEffect {
 			err = errorJsInterpolationSideEffect(sideEffectJs, interpolationJsAst.JS(), child.DebugTag(), p.Node.DebugTag())
+			break
 		}
 
 		interpolationJs = interpolationJsAst.JS()
@@ -165,24 +264,13 @@ func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute)
 			interpolationJs = interpolationJs[:len(interpolationJs)-2]
 		}
 
-		// A writer applies the result of an expression to something (text, attribute, component, directive), has three forms
-		//
-		//  A) JS: Array<key: writerIndex, value: [elementIndex, expressionIndex]>
-		//    Apply the result of an expression to an element ($(el).innerHtml = value)
-		//
-		//  B) JS: Array<key: writerIndex, value: [elementIndex, attributeIndex, expressionIndex]>
-		//    Applies the result of the expression to an attribute ($(el).setAttribute(value))
-		//
-		//  C) JS: Array<key: writerIndex, value: [elementIndex, attributeIndex, [string, expressionIndex, string, ...]]>
-		//    Apply the (dynamic) template to an attribute, allowing you to check for later changes to the attribute
-		//    $(el).setAttribute(parse(template))
-
 		if interpolation.IsFullContent {
+			isTemplate = false
 			if interpolation.IsSafeSignal {
 				// form inputs, can be two-way data-binding
 				nodeTagName := child.Data
 				if nodeTagName == "input" || nodeTagName == "select" || nodeTagName == "textarea" {
-					// 1) Node cannot have "onchange" or "oninput" event defined
+					// 1) NodeTest cannot have "onchange" or "oninput" event defined
 					//    onchange             [input, select, textarea] (occurs when the element loses focus)
 					//    oninput              [input, select, textarea] (occurs when an element gets user input)
 					//    on [paste|cut|drop]
@@ -211,10 +299,11 @@ func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute)
 
 				// <element attr="${value}"></element>
 				// <element attr="${return value}">
-				if p.Compiler.IsComponente(child) {
+				if child.Data == "component" || child.Attributes.Get("data-syntax-component") == "true" {
+					// is component
 					interpolationJs = "(" + interpolationJs + ")"
 				} else {
-					interpolationJs = "_$escape(" + interpolationJs + ")"
+					interpolationJs = "$.e(" + interpolationJs + ")"
 				}
 			} else {
 				// <element attr="#{escape unsafe}">
@@ -223,7 +312,7 @@ func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute)
 		} else {
 			if interpolation.IsSafeSignal {
 				// <element attr="text ${escape safe}">
-				interpolationJs = "_$escape(" + interpolationJs + ")"
+				interpolationJs = "$.e(" + interpolationJs + ")"
 			} else {
 				// <element attr="text #{escape unsafe}">
 				interpolationJs = "(" + interpolationJs + ")"
@@ -233,36 +322,69 @@ func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute)
 		// identical expressions are reused throughout the code
 		expressionIndex := strconv.Itoa(expressions.Add("() => { return " + interpolationJs + "; }"))
 
-		// splitting text, to check for modifications on client side
-		attrValueParts = strings.Replace(attrValueParts, interpolationId, "', "+expressionIndex+", '", 1)
+		if isTemplate {
+			// many expressions <element attr="text ${myVariable} text " >
 
-		watcherIndex := watchers.Add(
-			// Create a watcher that bind element attribute to expression result
-			// _$bind_prop(elementIndex, attributeIndex, expressionIndex )
-			"_$bindToExpression(" + elementIndex + ", " + attributeIndex + ", " + expressionIndex + ") /* " + interpolation.Debug() + " */",
-		)
+			// splitting text, to check for modifications on client side
+			templateInterpolations = append(templateInterpolations, interpolationJsAst)
+			templateExpressionsJsArr = strings.Replace(templateExpressionsJsArr, interpolationId, "', "+expressionIndex+", '", 1)
 
-		js.Walk(VisitorEnterFunc(func(node js.INode) bool {
-			// só estamos interessados em descobrir as expressoes que acessam variáveis de contexto
-			//
-			// Uma variável do context só é classificada como observada quando alguma expressão faz uso dessa variável
-			// para realizar alguma lógica.
-			if jsVar, isVar := node.(*js.Var); isVar {
-				if isDeclared, jsVarGlobal := IsDeclaredOnScope(jsVar, contextAstScope); isDeclared {
-					// associate watcher to variable
-					variableIndex := contextVariables.Add(jsVarGlobal)
-					watchersByVar[variableIndex] = append(watchersByVar[variableIndex], watcherIndex)
+		} else {
+			// full content, single expression <element attr="${myVariable}" >
+
+			// Applies the result of the expression to an attribute ($(el).setAttribute(value))
+			// JS: Array<key: writerIndex, value: [elementIndex, attributeIndex, expressionIndex]>
+			writerIndex := strconv.Itoa(writers.Add(
+				"[ " + elementIndex + ", " + attributeIndex + ", " + expressionIndex + "] /* " + interpolation.Debug() + " */",
+			))
+
+			// add the watchers for the variables watched by this writer
+			js.Walk(VisitorEnterFunc(func(node js.INode) bool {
+				if jsVar, isVar := node.(*js.Var); isVar {
+					if isDeclared, jsVarContext := IsDeclaredOnScope(jsVar, contextAstScope); isDeclared {
+						variableIndex := strconv.Itoa(contextVariables.Add(jsVarContext))
+						// JS: Array<key: _, value: [type, variableIndex, writerIndex]>
+						//    type 1 = schedule(writerIndex)
+						watchers.Add(
+							"[ 1, " + variableIndex + ", " + writerIndex + " ] /* " + jsVarContext.JS() + " -> " + interpolation.Debug() + " */",
+						)
+					}
 				}
-			}
-			return true
-		}), interpolationJsAst)
+				return true
+			}), interpolationJsAst)
+		}
 	}
 
-	// Criate a watcher that bind element attribute to expression result
-	watchers.Add(
-		// _$bind_prop_tpl(elementIndex, attributeIndex, ['content static 1', expressionIdx, 'content static 2'] )
-		"_$bind_prop_tpl(" + elementIndex + ", " + attributeIndex + ", ['" + attrValueParts + "'])",
-	)
+	if err != nil {
+		return err
+	}
+
+	if isTemplate {
+
+		// Apply the (dynamic) template to an attribute, allowing you to check for later changes to the attribute
+		// JS: Array<key: writerIndex, value: [elementIndex, attributeIndex, [string, expressionIndex, string, ...]]>
+		// $(el).setAttribute(parse(template))
+		writerIndex := strconv.Itoa(writers.Add(
+			"[ " + elementIndex + ", " + attributeIndex + ", " + templateExpressionsJsArr + "",
+		))
+
+		for _, ast := range templateInterpolations {
+			// add the watchers for the variables watched by this writer
+			js.Walk(VisitorEnterFunc(func(node js.INode) bool {
+				if jsVar, isVar := node.(*js.Var); isVar {
+					if isDeclared, jsVarContext := IsDeclaredOnScope(jsVar, contextAstScope); isDeclared {
+						variableIndex := strconv.Itoa(contextVariables.Add(jsVarContext))
+						// JS: Array<key: _, value: [type, variableIndex, writerIndex]>
+						//    type 1 = schedule(writerIndex)
+						watchers.Add(
+							"[ 1, " + variableIndex + ", " + writerIndex + " ] /* " + jsVarContext.JS() + " */",
+						)
+					}
+				}
+				return true
+			}), ast)
+		}
+	}
 
 	attr.Value = attrValue
 
@@ -320,6 +442,7 @@ func (p *ExpressionsParser) parseTextNode(child *sht.Node) error {
 		// is not allowed to a writer have a side effect (Ex. value++, value = other + 1)
 		if hasSideEffect, sideEffectJs := HasSideEffect(interpolationJsAst, contextAst); hasSideEffect {
 			err = errorJsInterpolationSideEffect(sideEffectJs, interpolationJsAst.JS(), child.DebugTag(), node.DebugTag())
+			break
 		}
 
 		interpolationJs = interpolationJsAst.JS()
@@ -328,7 +451,7 @@ func (p *ExpressionsParser) parseTextNode(child *sht.Node) error {
 		}
 		if interpolation.IsSafeSignal {
 			// <element>${escape safe}</element>
-			interpolationJs = "_$escape(" + interpolationJs + ")"
+			interpolationJs = "$.e(" + interpolationJs + ")"
 		} else {
 			// <element>#{escape unsafe}</element>
 			interpolationJs = "(" + interpolationJs + ")"
@@ -353,7 +476,7 @@ func (p *ExpressionsParser) parseTextNode(child *sht.Node) error {
 					// JS: Array<key: _, value: [type, variableIndex, writerIndex]>
 					//    type 1 = schedule(writerIndex)
 					watchers.Add(
-						"[ 1, " + variableIndex + ", " + writerIndex + " ] /* var: " + jsVarContext.JS() + ", writer: " + interpolation.Debug() + " */",
+						"[ 1, " + variableIndex + ", " + writerIndex + " ] /* " + jsVarContext.JS() + " -> " + interpolation.Debug() + " */",
 					)
 				}
 			}

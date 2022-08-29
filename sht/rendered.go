@@ -13,21 +13,23 @@ type Rendered struct {
 
 // Write the output to the given buffer
 func (r *Rendered) Write(buffer *bytes.Buffer) {
-	static := *r.Static
-	for i := 0; i < len(static); i++ {
-		if i == 0 {
-			buffer.WriteString(static[i])
-		} else {
-			// nil, string, Rendered
-			dynamic := r.Dynamics[i-1]
-			if dynamic != nil {
-				if value, ok := dynamic.(string); ok {
-					buffer.WriteString(value)
-				} else if rendered, ok := dynamic.(*Rendered); ok && rendered != nil {
-					rendered.Write(buffer)
+	if r.Static != nil {
+		static := *r.Static
+		for i := 0; i < len(static); i++ {
+			if i == 0 {
+				buffer.WriteString(static[i])
+			} else {
+				// nil, string, Rendered
+				dynamic := r.Dynamics[i-1]
+				if dynamic != nil {
+					if value, ok := dynamic.(string); ok {
+						buffer.WriteString(value)
+					} else if rendered, ok := dynamic.(*Rendered); ok && rendered != nil {
+						rendered.Write(buffer)
+					}
 				}
+				buffer.WriteString(static[i])
 			}
-			buffer.WriteString(static[i])
 		}
 	}
 }

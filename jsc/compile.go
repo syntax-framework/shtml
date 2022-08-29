@@ -3,20 +3,17 @@ package jsc
 import (
 	"bytes"
 	"fmt"
+	"github.com/syntax-framework/shtml/cmn"
 	"github.com/syntax-framework/shtml/sht"
 	"github.com/tdewolff/parse/v2"
 	"github.com/tdewolff/parse/v2/js"
-	"golang.org/x/net/html/atom"
 	"strconv"
-	"strings"
 )
 
-var errorCompJsRedeclaration = sht.Err(
+var errorCompJsRedeclaration = cmn.Err(
 	"component.js.redeclaration",
 	"SyntaxError: Identifier has already been declared.", "Identifier: %s", "Context: %s", "Component: %s",
 )
-
-// @TODO: Usar https://github.com/evanw/esbuild?
 
 // jsWatchInvalidateBlock
 //
@@ -95,7 +92,12 @@ func init() {
 }
 
 // Compile does all the necessary handling to link the template with javascript
-func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset *Javascript, err error) {
+func Compile(nodeParent *sht.Node, nodeScript *sht.Node, sequenceGlobal *sht.Sequence) (asset *Javascript, err error) {
+
+	if nodeScript != nil && nodeScript.Attributes.Get("src") != "" {
+		// jsc only works with inline scripts, any external script must be handled by specialized module
+		return nil, err
+	}
 
 	sequence := &sht.Sequence{}
 	nodeParentIsComponent := false
@@ -104,38 +106,37 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 		sequence.Salt = nodeParent.Attributes.Get("name")
 	} else {
 		if nodeScript != nil && nodeScript.FirstChild != nil {
-			sequence.Salt = sht.HashXXH64(nodeScript.FirstChild.Data)
+			sequence.Salt = sht.HashXXH64([]byte(nodeScript.FirstChild.Data))
 		} else {
-			sequence.Salt = t.NextHash()
+			sequence.Salt = sequenceGlobal.NextHash()
 		}
 	}
 
-	// Unique node identifier (#id or .class-name)
-	// @TODO: make global to prevent a node from having more than one identifier
+	// Unique node identifier (#id or data-syntax-id)
 	getNodeIdentifier := sht.CreateNodeIdentifier(sequence)
 
 	// All script global variables being used
-	contextVariables := &sht.IndexedMap{}
+	contextVariables := &cmn.IndexedSet{}
 
 	// All expressions created in the code are idexed, to allow removing duplicates
 	// JS: Array<key: expressionIndex, value: Function>
-	expressions := &sht.IndexedMap{}
+	expressions := &cmn.IndexedSet{}
 
 	// The elements used by the script and which therefore must be referenced in the code
-	// JS: Array<key: elementIndex, value: string(#id|.class-name)>
-	elements := &sht.IndexedMap{}
+	// JS: Array<key: elementIndex, value: string(#id|data-syntax-id)>
+	elements := &cmn.IndexedSet{}
 
 	// All html attributeNames referencied in writers (Ex. src, href, value)
 	// JS: Array<key: attributeIndex, value: string>
-	attributeNames := &sht.IndexedMap{}
+	attributeNames := &cmn.IndexedSet{}
 
 	// All html events referenced in code (Ex. click, change)
 	// JS: Array<key: eventNameIndex, value: string>
-	eventNames := &sht.IndexedMap{}
+	eventNames := &cmn.IndexedSet{}
 
 	// Mapping of html events that are fired in code
 	// JS: Array<[elementIndex, eventNameIndex, expressionIndex]>
-	events := &sht.IndexedMap{}
+	events := &cmn.IndexedSet{}
 
 	// A writer applies the result of an expression to something (text, attribute, component, directive), has three forms
 	//
@@ -148,13 +149,13 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 	//  C) JS: Array<key: writerIndex, value: [elementIndex, attributeIndex, [string, expressionIndex, string, ...]]>
 	//    Apply the (dynamic) template to an attribute, allowing you to check for later changes to the attribute
 	//    $(el).setAttribute(parse(template))
-	writers := &sht.IndexedMap{}
+	writers := &cmn.IndexedSet{}
 
 	// All watches. Represent expressions that will react when a variable changes.
 	// JS: Array<key: _, value: [type, variableIndex, expressionIndex|writerIndex]>
 	//    type 0 = action(expressionIndex)
 	//    type 1 = schedule(writerIndex)
-	watchers := &sht.IndexedMap{}
+	watchers := &cmn.IndexedSet{}
 
 	// parse component params (<element param-name="type" client-param-name="type">)
 	var componentParams *NodeComponentParams
@@ -165,7 +166,7 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 	}
 
 	// parse references to elements within the template (<element ref="myJsVariable">)
-	references, referenceErr := ParseReferences(nodeParent, t)
+	references, referenceErr := ParseReferences(nodeParent)
 	if referenceErr != nil {
 		return nil, referenceErr
 	}
@@ -212,38 +213,33 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 			jsSource = jsSource + nodeScript.FirstChild.Data
 		}
 
-		if nodeParentIsComponent {
-			// when component, remove script from render
-			nodeScript.Remove()
-		} else {
-			// for page scripts, remove only content, will be initialized by syntax using this element
-			nodeScript.FirstChild = nil
-			nodeScript.LastChild = nil
-		}
+		//
+		//if nodeParentIsComponent {
+		//	// when component, remove script from render
+		//   nodeScript.Remove()
+		//} else {
+		//	// for page scripts, remove only content, will be used by the framework to initialize this content
+		//	nodeScript.Data = "s"
+		//	nodeScript.FirstChild = nil
+		//	nodeScript.LastChild = nil
+		//	nodeScript.Attributes.set("hidden", "hidden")
+		//}
 	}
 
 	contextJsAst, contextJsAstErr := js.Parse(parse.NewInputString(jsSource), js.Options{})
 	if contextJsAstErr != nil {
-		err = contextJsAstErr // @TODO: Custom error or Warning
-		return
+		return nil, contextJsAstErr // @TODO: Custom error or Warning
 	}
 	contextAstScope := &contextJsAst.BlockStmt.Scope
+
+	// Parse all exports, change by varibles
+	export, exportDefault := parseExportApi(contextJsAst)
 
 	// @TODO: fork the project https://github.com/tdewolff/parse/tree/master/js and add feature to keep original formatting
 	jsSource = contextJsAst.JS()
 
-	// @DEPRECATED
-	idxEventHandlers := &sht.IndexedMap{}
-
-	// @DEPRECATED
-	// identifies which watches are candidates for replay when a variable changes
-	// [ $varIndex = [$watchIndexA, $watchIndexB]]
-	watchersByVar := map[int][]int{}
-
-	// 1 - Map all watch expressions. After that, all the variables that are being watched will have been mapped
 	expressionsErr := (&ExpressionsParser{
 		Node:               nodeParent,
-		Compiler:           t,
 		Sequence:           sequence,
 		ContextAst:         contextJsAst,
 		ContextAstScope:    contextAstScope,
@@ -255,144 +251,10 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 		Expressions:        expressions,
 		Writers:            writers,
 		Watchers:           watchers,
-		WatchersByVar:      watchersByVar,
 		NodeIdentifierFunc: getNodeIdentifier,
 	}).Parse()
 	if expressionsErr != nil {
-		err = expressionsErr // @TODO: Custom error or Warning
-		return
-	}
-
-	// Parse Events
-	t.Transverse(nodeParent, func(child *sht.Node) (stop bool) {
-		stop = false
-		if child == nodeParent || child.Type != sht.ElementNode {
-			return
-		}
-
-		// @TODO: When child is a registered component, do proper expr processing
-		// nodeParentIsComponent := false
-
-		for attrNameNormalized, attr := range child.Attributes.Map {
-			if strings.HasPrefix(attrNameNormalized, "on") {
-
-				// html events
-				eventJsCode := strings.TrimSpace(attr.Value)
-
-				elements.Add(getNodeIdentifier(child))
-
-				if strings.HasPrefix(eventJsCode, "js:") {
-					// If it has the prefix "js:", it does not process
-					//    Ex. <button onclick="js: doSomeThing && doOtherThing">
-					eventJsCode = strings.Replace(eventJsCode, "js:", "", 1)
-				} else if strings.HasPrefix(eventJsCode, "javascript:") {
-					// If it has the prefix "javascript:", it does not process
-					//    Ex. <button onclick="javascript: doSomeThing && doOtherThing">
-					eventJsCode = strings.Replace(eventJsCode, "javascript:", "", 1)
-				} else {
-
-					//eventJsCode = "(e) => { " + eventJsCode + " }"
-					eventJsAst, eventJsAstErr := js.Parse(parse.NewInputString(eventJsCode), js.Options{})
-					if eventJsAstErr != nil {
-						err = eventJsAstErr // @TODO: Custom error or Warning
-						break
-					}
-
-					eventJsAstScope := eventJsAst.BlockStmt.Scope
-
-					// resolve reference to eventIdx ("e") variable. Ex. "(e) => { myCallback(e.MouseX) }"
-					eventJsAstScope.Parent = eventVariableScope
-					eventJsAstScope.HoistUndeclared()
-					eventVariableScope.Undeclared = nil
-
-					// resolve references to global scope (component <script> source code and client-param-*)
-					undeclaredBackup := contextAstScope.Undeclared
-					eventJsAstScope.Parent = contextAstScope
-					eventJsAstScope.HoistUndeclared()
-					contextAstScope.Undeclared = undeclaredBackup
-
-					stmt := eventJsAst.BlockStmt.List[0]
-					if exprStmt, isExprStmt := stmt.(*js.ExprStmt); isExprStmt {
-						switch exprStmt.Value.(type) {
-						case *js.CallExpr:
-							// <element onclick="someFunc(arg1, arg2, argn...)">
-							callExpr := exprStmt.Value.(*js.CallExpr)
-							if jsVar, isVar := callExpr.X.(*js.Var); isVar {
-								if isDeclared, _ := IsDeclaredOnScope(jsVar, contextAstScope); isDeclared {
-									// is a custom javascript function or "client-param-name"
-									// Ex. <button onclick="onClick()">
-									eventJsCode = "(e) => { " + callExpr.JS() + " }"
-								} else {
-									// @TODO: STX.push
-									// considers it to be a remote eventIdx call (push)
-									functionName := jsVar.String()
-									eventName := functionName
-									eventPayload := ""
-									if functionName == "push" {
-										// <button onclick="push('increment', count, time, e.MouseX)" data-ref="mySpan">
-									} else {
-										// <button onclick="increment(count, time, e.MouseX)">
-
-									}
-									eventJsCode = fmt.Sprintf("(e) => { STX.push('%s', $, e, %s) }", eventName, eventPayload)
-								}
-							} else {
-								panic("@TODO: what to do? I didn't find a scenario")
-							}
-						case *js.Var:
-							// <element onclick="someVariable">
-							jsVar := exprStmt.Value.(*js.Var)
-							if isDeclared, _ := IsDeclaredOnScope(jsVar, contextAstScope); isDeclared {
-								// is a custom javascript variable or "client-param-name"
-								// Ex. <button onclick="callback"></button>
-								eventJsCode = fmt.Sprintf("(e) => { %s(e) }", jsVar.String())
-							} else {
-								// considers it to be a remote eventIdx call (push)
-								// <button onclick="increment"></button>
-								eventJsCode = fmt.Sprintf("(e) => { STX.push('%s', $, e) }", jsVar.String())
-							}
-						case *js.ArrowFunc:
-							// <element onclick="(e) => doSomething">
-							eventJsCode = exprStmt.Value.(*js.ArrowFunc).JS()
-						case *js.FuncDecl:
-							// <element onclick="function xpto(e){ doSomething() }">
-							eventJsCode = "(e) => { (" + exprStmt.Value.(*js.FuncDecl).JS() + ")() }"
-						default:
-							eventJsCode = fmt.Sprintf("(e) => { %s }", eventJsCode)
-						}
-					}
-
-					//println(eventJsAst)
-					// Se existir "client-param-*" ou uma variável com mesmo nome no inicio, não processa
-					//    <button onclick="onClick()">
-					//    <button onclick="callback">
-					// Se tiver expr padrão "NOME_EVENTO" ou "NOME_EVENTO(...)" ou  "push(NOME_EVENTO, ...)", considera que é push para expr server
-					//    <button onclick="increment">
-					//    <button onclick="increment(count, time, e.MouseX)">
-					//    <button onclick="push('increment', count, time, e.MouseX)" data-ref="mySpan">
-					// Para todos os outros casos, não processa
-				}
-
-				// add event handler
-				// _$on(_$event_names[0], _$elements[1], _$event_handlers[5]);
-				eventIdx := strconv.Itoa(eventNames.Add(strings.Replace(attrNameNormalized, "on", "", 1)))
-				handlerIdx := strconv.Itoa(idxEventHandlers.Add(eventJsCode))
-				elementIdx := strconv.Itoa(elements.Add(getNodeIdentifier(child)))
-				events.Add(
-					"[" + eventIdx + ", " + elementIdx + ", " + handlerIdx + "]",
-				)
-			}
-		}
-
-		if err != nil {
-			stop = true
-		}
-
-		return
-	})
-
-	if err != nil {
-		return
+		return nil, expressionsErr // @TODO: Custom error or Warning
 	}
 
 	// write the component JS
@@ -401,23 +263,21 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 	if nodeParentIsComponent {
 		bjs.WriteString("STX.c('" + nodeParent.Data + "', function (STX) {\n")
 	} else {
-		var anchorId string
-		if nodeScript != nil {
-			//nodeScript.Attributes.Set("data-syntax-s", "")
-			anchorId = getNodeIdentifier(nodeScript)
-		} else {
-			anchorScript := &sht.Node{
-				Data:       "script",
-				DataAtom:   atom.Script,
-				File:       nodeParent.File,
-				Line:       nodeParent.Line,
-				Column:     nodeParent.Column,
-				Attributes: &sht.Attributes{Map: map[string]*sht.Attribute{}},
-			}
-			//anchorScript.Attributes.Set("data-syntax-s", "")
-			nodeParent.AppendChild(anchorScript)
-			anchorId = getNodeIdentifier(anchorScript)
-		}
+		anchorId := getNodeIdentifier(nodeParent)
+		//if nodeScript != nil {
+		//} else {
+		//  anchor := &sht.NodeTest{
+		//    Data:       "s",
+		//    DataAtom:   atom.Script,
+		//    File:       nodeParent.File,
+		//    Line:       nodeParent.Line,
+		//    Column:     nodeParent.Column,
+		//    Attributes: &sht.Attributes{Map: map[string]*sht.Attribute{}},
+		//  }
+		//  anchor.Attributes.set("hidden", "hidden")
+		//  nodeParent.AppendChild(anchor)
+		//  anchorId = getNodeIdentifier(anchor)
+		//}
 		bjs.WriteString("STX.s('" + anchorId + "', function (STX) {\n")
 	}
 
@@ -431,15 +291,13 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 	bjs.WriteString(fmt.Sprintf(`  const _$file = "%s";`, nodeParent.File))
 	bjs.WriteRune('\n')
 
-	if !watchers.IsEmpty() {
-		bjs.WriteString("\n  const _$bind = STX.bindToText;\n")
-	}
-
 	bjs.WriteString("\n  return {\n    f: _$file,\n    l: _$line,")
 
 	// Elements class ids
 	if !elements.IsEmpty() {
-		bjs.WriteString("\n    e: [ /* $elements */")
+		bjs.WriteString("\n    // Elements")
+		bjs.WriteString("\n    //   Array<key: elementIndex, value: string(#id|data-syntax-id)>")
+		bjs.WriteString("\n    e: [")
 		for i, id := range elements.ToArray() {
 			if i > 0 {
 				bjs.WriteString(",")
@@ -451,6 +309,8 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 
 	// Attributes used
 	if !attributeNames.IsEmpty() {
+		bjs.WriteString("\n    // Attribute Names")
+		bjs.WriteString("\n    //   Array<key: attributeIndex, value: string>")
 		bjs.WriteString("\n    a : [")
 		for i, name := range attributeNames.ToArray() {
 			if i > 0 {
@@ -458,11 +318,13 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 			}
 			bjs.WriteString("'" + name.(string) + "'")
 		}
-		bjs.WriteString("] /* $attributeNames */,")
+		bjs.WriteString("],")
 	}
 
 	// Event names
 	if !eventNames.IsEmpty() {
+		bjs.WriteString("\n    // Event Names")
+		bjs.WriteString("\n    //   Array<key: eventNameIndex, value: string>")
 		bjs.WriteString("\n    n : [")
 		for i, name := range eventNames.ToArray() {
 			if i > 0 {
@@ -470,11 +332,13 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 			}
 			bjs.WriteString("'" + name.(string) + "'")
 		}
-		bjs.WriteString("] /* $event_names */,")
+		bjs.WriteString("],")
 	}
 
 	if !events.IsEmpty() {
-		bjs.WriteString("\n    o : [ /* $events */")
+		bjs.WriteString("\n    // Events")
+		bjs.WriteString("\n    //   Array<[elementIndex, eventNameIndex, expressionIndex]>")
+		bjs.WriteString("\n    o : [")
 		// _$on(_$event_names[0], _$elements[5], _$event_handlers[1]);
 		for j, jsEventHandler := range events.ToArray() {
 			if j > 0 {
@@ -485,9 +349,29 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 		bjs.WriteString("\n    ],")
 	}
 
+	// writers
+	if !writers.IsEmpty() {
+		bjs.WriteString("\n    // Writers")
+		bjs.WriteString("\n    //   Array<key: writerIndex, value: [elementIndex, expressionIndex]>")
+		bjs.WriteString("\n    //   Array<key: writerIndex, value: [elementIndex, attributeIndex, expressionIndex]>")
+		bjs.WriteString("\n    //   Array<key: writerIndex, value: [elementIndex, attributeIndex, [string, expressionIndex, string, ...]]>")
+		bjs.WriteString("\n    t : [")
+		for i, writer := range writers.ToArray() {
+			if i > 0 {
+				bjs.WriteString(",")
+			}
+			bjs.WriteString("\n      " + writer.(string))
+		}
+		bjs.WriteString("\n    ],")
+	}
+
 	// watchers
 	if !watchers.IsEmpty() {
-		bjs.WriteString("\n    w : [ /* $watchers */")
+		bjs.WriteString("\n    // Watchers")
+		bjs.WriteString("\n    //   Array<key: _, value: [type, variableIndex, expressionIndex|writerIndex]>")
+		bjs.WriteString("\n    //     type 0 = action(expressionIndex)")
+		bjs.WriteString("\n    //     type 1 = schedule(writerIndex)")
+		bjs.WriteString("\n    w : [")
 		for i, watcher := range watchers.ToArray() {
 			if i > 0 {
 				bjs.WriteString(",")
@@ -499,11 +383,10 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 
 	// START - Instance Function
 	bjs.WriteString("\n    i : function ($) {\n")
-	bjs.WriteString("      const [_$escape ] = [STX.escape];\n")
 
 	// initialize references (need to be visible in global scope to be indexed)
 	if len(references) > 0 {
-		bjs.WriteString("\n      // references (define)\n")
+		bjs.WriteString("\n      // References (define)\n")
 		for _, reference := range references {
 			bjs.WriteString(fmt.Sprintf(`      let %s;`, reference.VarName))
 			bjs.WriteRune('\n')
@@ -511,77 +394,62 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 	}
 
 	// component code
-	bjs.WriteString("\n      // component\n")
+	bjs.WriteString("\n      // Component\n")
 	if jsSource != "" {
 		bjs.WriteString("      " + jsSource + "\n")
 	}
 
-	// Configure hooks (lifecycle callback and api)
-	var jsHooks []string
-	for _, v := range contextAstScope.Declared {
-		varName := v.String()
-		if ClientComponentFieldsMap[varName] == true {
-			jsHooks = append(jsHooks, varName)
-		}
-	}
-	if len(jsHooks) > 0 {
-		bjs.WriteString("\n      // hooks\n      $.hooks({ ")
-		for i, hook := range jsHooks {
-			if i > 0 {
-				bjs.WriteString(", ")
-			}
-			bjs.WriteString(hook)
-		}
-		bjs.WriteString(" })\n")
-	}
-
 	// initialize references
 	if len(references) > 0 {
-		bjs.WriteString("\n      // references (initialize)\n")
+		bjs.WriteString("\n      // References (initialize)\n")
 		for _, ref := range references {
-			isComponent := false
-
-			elementIdx := strconv.Itoa(elements.Get(getNodeIdentifier(ref.Node)))
-
-			// if is component
-			bjs.WriteString("      " + ref.VarName + " = ")
-			if isComponent {
-				bjs.WriteString("STX.init('otherComponent', $(" + elementIdx + "), { callback: () => fazAlgumaCoisa() });")
-			} else {
-				bjs.WriteString("$(" + elementIdx + ");")
-			}
-			bjs.WriteRune('\n')
-
-			// remove attribute from nodeParent (to not be rendered anymore)
-			ref.Node.Attributes.Remove(ref.Attr)
+			elementIndex := strconv.Itoa(elements.GetIndex(getNodeIdentifier(ref.Node)))
+			bjs.WriteString("      " + ref.VarName + " = $(" + elementIndex + ");\n")
 		}
 	}
 
 	// START - Return instance
 	bjs.WriteString("\n      return {")
 
-	// all expressions
-	if !expressions.IsEmpty() {
-		bjs.WriteString("\n        e : [ /* $expressions */")
-		for i, expression := range expressions.ToArray() {
+	// LifeCycle callback
+	i := 0
+	for _, v := range contextAstScope.Declared {
+		varName := v.String()
+		if field, exist := ClientLifeCycleMap[varName]; exist {
 			if i > 0 {
 				bjs.WriteString(",")
 			}
+			i++
+			bjs.WriteString("\n        " + field + " : " + varName)
+		}
+	}
+
+	// All expressions
+	if !expressions.IsEmpty() {
+		bjs.WriteString("\n        // Expressions\n        x : [")
+		for _, expression := range expressions.ToArray() {
+			if i > 0 {
+				bjs.WriteString(",")
+			}
+			i++
 			bjs.WriteString("\n          " + expression.(string))
 		}
 		bjs.WriteString("\n        ],")
 	}
 
-	// Event names
-	if !idxEventHandlers.IsEmpty() {
-		bjs.WriteString("\n        h : [ /* $event_handlers */")
-		for i, handler := range idxEventHandlers.ToArray() {
+	// Exports (component API)
+	if exportDefault != nil {
+		bjs.WriteString("\n        // API (exports)\n        z : " + exportDefault.JS())
+	} else if !export.IsEmpty() {
+		bjs.WriteString("\n        // API (exports)\n        z : {")
+		for _, expression := range export.ToArray() {
 			if i > 0 {
 				bjs.WriteString(",")
 			}
-			bjs.WriteString("\n          " + handler.(string))
+			i++
+			bjs.WriteString("\n          " + expression.(string))
 		}
-		bjs.WriteString("\n        ]")
+		bjs.WriteString("\n        }")
 	}
 
 	bjs.WriteString("\n      };\n") // END - Return instance
@@ -596,12 +464,62 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, t *sht.Compiler) (asset
 		}
 	}
 
-	println(bjs.String())
-
 	jsCode := &Javascript{
 		Content: bjs.String(),
 		//ComponentParams: ClientParams,
 	}
 
 	return jsCode, nil
+}
+
+// parseExportApi All exports are transformed in the component's API, and can be accessed by the "ref" attribute
+//
+// All exports from the JS file are collected and made available in the "return" of the instance
+// If there is a default export, all other exports will be ignored and the default will be used in the "return"
+func parseExportApi(contextJsAst *js.AST) (*cmn.IndexedSet, js.INode) {
+	export := &cmn.IndexedSet{}
+	var exportDefault js.INode
+	for i, stmt := range contextJsAst.BlockStmt.List {
+		if jsExportStmt, isExportStmt := stmt.(*js.ExportStmt); isExportStmt {
+			if jsExportStmt.Default {
+				// export default SOMETHING
+				exportDefault = jsExportStmt.Decl
+				contextJsAst.BlockStmt.List[i] = &js.EmptyStmt{}
+			} else if jsExportStmt.List != nil {
+				for _, alias := range jsExportStmt.List {
+					binding := string(alias.Binding)
+					if alias.Name == nil {
+						// export { myVar, myVar2 }
+						export.Add(binding + " : " + binding)
+					} else {
+						// export { myVar as myVarRenamed, myVar2 }
+						export.Add(binding + " : " + string(alias.Name))
+					}
+				}
+				// replace `export { myVar , myVar2 }`
+				contextJsAst.BlockStmt.List[i] = &js.EmptyStmt{}
+			} else if jsExportStmt.Decl != nil {
+				if Stmt, isIStmt := jsExportStmt.Decl.(js.IStmt); isIStmt {
+					switch Stmt.(type) {
+					case *js.VarDecl:
+						for _, binding := range Stmt.(*js.VarDecl).List {
+							switch binding.Binding.(type) {
+							case *js.Var:
+								name := binding.Binding.(*js.Var).String()
+								export.Add(name + " : " + name)
+							}
+						}
+					case *js.FuncDecl:
+						name := Stmt.(*js.FuncDecl).Name.String()
+						export.Add(name + " : " + name)
+					case *js.ClassDecl:
+						name := Stmt.(*js.ClassDecl).Name.String()
+						export.Add(name + " : " + name)
+					}
+					contextJsAst.BlockStmt.List[i] = Stmt
+				}
+			}
+		}
+	}
+	return export, exportDefault
 }

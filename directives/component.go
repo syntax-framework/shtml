@@ -1,31 +1,32 @@
 package directives
 
 import (
+	"github.com/syntax-framework/shtml/cmn"
 	"github.com/syntax-framework/shtml/jsc"
 	"github.com/syntax-framework/shtml/sht"
 )
 
-var errorCompNested = sht.Err(
+var errorCompNested = cmn.Err(
 	"component:nested",
 	"It is not allowed for a component to be defined inside another.", "Outer: %s", "Inner: %s",
 )
 
-var errorCompStyleSingle = sht.Err(
+var errorCompStyleSingle = cmn.Err(
 	"component:style:single",
 	"A component can only have a single style element.", "First: %s", "Second: %s",
 )
 
-var errorCompStyleLocation = sht.Err(
+var errorCompStyleLocation = cmn.Err(
 	"component:style:location",
 	"Style element must be an immediate child of the component.", "Component: %s", "Style: %s",
 )
 
-var errorCompScriptSingle = sht.Err(
+var errorCompScriptSingle = cmn.Err(
 	"component:script:single",
 	"A component can only have a single script element.", "First: %s", "Second: %s",
 )
 
-var errorCompScriptLocation = sht.Err(
+var errorCompScriptLocation = cmn.Err(
 	"component:script:location",
 	"Script element must be an immediate child of the component.", "Component: %s", "Script: %s",
 )
@@ -46,7 +47,7 @@ var Component = &sht.Directive{
 		var style *sht.Node
 		var script *sht.Node
 
-		t.Transverse(node, func(child *sht.Node) (stop bool) {
+		node.Transverse(func(child *sht.Node) (stop bool) {
 			stop = false
 			if child == node || child.Type != sht.ElementNode {
 				return
@@ -106,7 +107,7 @@ var Component = &sht.Directive{
 		//	}
 		//}
 
-		assetJavascript, err := jsc.Compile(node, script, t)
+		assetJavascript, err := jsc.Compile(node, script, t.Sequence)
 		println(assetJavascript)
 
 		// @TODO: Registrar o componente no contexto de compilação

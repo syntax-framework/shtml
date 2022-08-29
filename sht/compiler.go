@@ -16,7 +16,7 @@ type Compiler struct {
 	Assets     map[*cmn.Asset]bool // The possible resources that will be used by this template
 	Context    *Context            // allows directives to save context information during compilation
 	dynamics   []Dynamic
-	sequence   *Sequence
+	Sequence   *Sequence
 }
 
 // _PrevContext used for previous compilation of the current node
@@ -54,41 +54,12 @@ func (c *Compiler) Compile(template string, filepath string) (*Compiled, error) 
 	return c.compile(nodeList, nil)
 }
 
-func (c *Compiler) IsComponente(child *Node) bool {
-	// @TODO: Descobir se o node é um Componente registrado
-	return false
-}
-
 // NextHash Used by components to predictively obtain a hash
 func (c *Compiler) NextHash() string {
-	if c.sequence == nil {
-		c.sequence = &Sequence{}
+	if c.Sequence == nil {
+		c.Sequence = &Sequence{}
 	}
-	return c.sequence.NextHash("")
-}
-
-// RegisterAssetJsContent register an anonymous javascript that can be used in this template
-func (c *Compiler) RegisterAssetJsContent(content string) *cmn.Asset {
-	name := HashXXH64(content)
-	asset := &cmn.Asset{
-		Content: content,
-		Name:    name,
-		Etag:    name,
-		Size:    int64(len([]byte(content))),
-		Type:    cmn.Javascript,
-	}
-
-	c.RegisterAsset(asset)
-
-	return asset
-}
-
-// RegisterAsset register an asset that can be used in this template
-func (c *Compiler) RegisterAsset(asset *cmn.Asset) {
-	if c.Assets == nil {
-		c.Assets = map[*cmn.Asset]bool{}
-	}
-	c.Assets[asset] = true
+	return c.Sequence.NextHash()
 }
 
 // ExtractRoot remove o node do root atual e retorna um novo root para os filhos do node atual
@@ -125,21 +96,39 @@ func (c *Compiler) SafeRemove(node *Node) {
 	}
 }
 
-// Transverse run callback for node and all its children, until callback returns true
-//
-// @TODO: Alterar o algoritmo para o formato enter() exit().
-// transverse(func(node, enter){ /*before*/ enter() /*after*/  })
-func (c *Compiler) Transverse(node *Node, callback func(node *Node) (stop bool)) {
-	var f func(*Node)
-	f = func(n *Node) {
-		if callback(n) {
-			return
-		}
-		for d := n.FirstChild; d != nil; d = d.NextSibling {
-			f(d)
-		}
+// RegisterAsset register an asset that can be used in this template
+func (c *Compiler) RegisterAsset(asset *cmn.Asset) {
+	if c.Assets == nil {
+		c.Assets = map[*cmn.Asset]bool{}
 	}
-	f(node)
+
+	c.Assets[asset] = true
+	c.System.RegisterAsset(asset)
+}
+
+// RegisterAssetJsURL registers an external javascript being used by this template
+func (c *Compiler) RegisterAssetJsURL(src string) (*cmn.Asset, error) {
+	asset, err := c.System.RegisterAssetJsURL(src)
+	if err == nil {
+		c.RegisterAsset(asset)
+	}
+	return asset, nil
+}
+
+// RegisterAssetJsFilepath register an existing javascript in the filesystem being used by this template
+func (c *Compiler) RegisterAssetJsFilepath(filepath string) (*cmn.Asset, error) {
+	asset, err := c.System.RegisterAssetJsFilepath(filepath)
+	if err == nil {
+		c.RegisterAsset(asset)
+	}
+	return asset, nil
+}
+
+// RegisterAssetJsContent register an anonymous javascript that can be used in this template
+func (c *Compiler) RegisterAssetJsContent(content string) *cmn.Asset {
+	asset := c.System.RegisterAssetJsContent(content)
+	c.RegisterAsset(asset)
+	return asset
 }
 
 func (c *Compiler) compileNode(node *Node, context *_PrevContext) (*Compiled, error) {
@@ -274,7 +263,7 @@ func (c *Compiler) extractCompiled(nodeList []*Node) *Compiled {
 	return compiled
 }
 
-//func assertNoDuplicate(what string, previousDirective *Directive, directive *Directive, element *Node) {
+//func assertNoDuplicate(what string, previousDirective *Directive, directive *Directive, element *NodeTest) {
 //	if previousDirective != nil {
 //		log.Fatal("Multiple directives [{0}, {1}] asking for {3} on: {5}")
 //		// previousDirective.Name, directive.name, what, startingTag(element)
@@ -351,7 +340,7 @@ func (c *Compiler) compileDirectives(
 					// transcludeFn
 				})
 				if err != nil {
-					log.Fatal(err)
+					return nil, err // @TODO: custom error
 				}
 				dynamic.transcludeSlots = map[string]*Compiled{"*": contentCompiled}
 
@@ -360,19 +349,32 @@ func (c *Compiler) compileDirectives(
 			} else {
 				if transclude == true {
 					childNodes := node.GetChildNodes()
-					if childNodes != nil || len(childNodes) > 0 {
-						c.processNodes(childNodes, prevContext)
+					if childNodes != nil && len(childNodes) > 0 {
+						processNodesErr := c.processNodes(childNodes, prevContext)
+						if processNodesErr != nil {
+							return nil, processNodesErr // @TODO: trace
+						}
+
+						contentCompiled, err := c.compileNode(c.ExtractRoot(node), &_PrevContext{
+							MaxPriority: terminalPriority,
+							// ignoreDirective
+							// transcludeFn
+							// {needsNewScope: directive.$$isolateScope || directive.$$newScope}
+						})
+						if err != nil {
+							return nil, err
+						}
+
+						if contentCompiled.Assets == nil && contentCompiled.dynamics == nil && len(contentCompiled.static) == 1 && contentCompiled.static[0] == "" {
+							// empty content, removed by directives
+							dynamic.transcludeSlots = nil
+						} else {
+							dynamic.transcludeSlots = map[string]*Compiled{"*": contentCompiled}
+						}
+					} else {
+						// empty content, removed by directives
+						dynamic.transcludeSlots = nil
 					}
-					contentCompiled, err := c.compileNode(c.ExtractRoot(node), &_PrevContext{
-						MaxPriority: terminalPriority,
-						// ignoreDirective
-						// transcludeFn
-						// {needsNewScope: directive.$$isolateScope || directive.$$newScope}
-					})
-					if err != nil {
-						log.Fatal(err)
-					}
-					dynamic.transcludeSlots = map[string]*Compiled{"*": contentCompiled}
 				} else if config, ok := transclude.(map[string]string); ok {
 					println(config)
 				} else {

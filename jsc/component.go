@@ -7,12 +7,12 @@ import (
 	"strings"
 )
 
-var errorCompClientParamReferenceNotFound = sht.Err(
+var errorCompClientParamReferenceNotFound = cmn.Err(
 	"component.param.client.ref.notfound",
 	"The referenced parameter does not exist.", `Param: client-param-%s="@%s"`, "Component: %s",
 )
 
-var errorCompClientParamInvalidName = sht.Err(
+var errorCompClientParamInvalidName = cmn.Err(
 	"component.param.client.name",
 	"The parameter name is invalid.", `Param: client-param-%s="@%s"`, "Component: %s",
 )

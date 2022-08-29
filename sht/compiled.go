@@ -44,7 +44,7 @@ func (c *Compiled) Exec(scope *Scope) *Rendered {
 	return out
 }
 
-// Fingerprint Get static fingerprint
+// Fingerprint GetIndex static fingerprint
 func (c *Compiled) Fingerprint() string {
 	if c.fingerprint == "" {
 		h := md5.New()

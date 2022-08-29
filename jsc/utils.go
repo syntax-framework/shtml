@@ -1,7 +1,7 @@
 package jsc
 
 import (
-	"github.com/syntax-framework/shtml/sht"
+	"github.com/syntax-framework/shtml/cmn"
 	"github.com/tdewolff/parse/v2/js"
 	"strconv"
 )
@@ -84,7 +84,7 @@ func IsDeclaredOnScope(expr *js.Var, scope *js.Scope) (bool, *js.Var) {
 	return false, nil
 }
 
-func AddDispatcers(ast js.INode, globalScope *js.Scope, globaUsedVars *sht.IndexedMap, stack *WalkScopeStack) {
+func AddDispatcers(ast js.INode, globalScope *js.Scope, globaUsedVars *cmn.IndexedSet, stack *WalkScopeStack) {
 	// fast check
 	if hasSideEffect, _ := HasSideEffect(ast, nil); hasSideEffect {
 		WalkScoped(IVisitorScopedFunc(func(node js.INode, stack *WalkScopeStack) bool {

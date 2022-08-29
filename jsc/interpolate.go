@@ -94,7 +94,7 @@ func Interpolate(text string, sequence *sht.Sequence) (string, map[string]*Inter
 				inExpression = true
 				isSafeSignal = currChar == '$'
 
-				expressionId = sequence.NextHash("")
+				expressionId = sequence.NextHash()
 				content.WriteString(expressionId)
 
 				expressionContent = &bytes.Buffer{}

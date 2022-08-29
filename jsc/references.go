@@ -2,16 +2,17 @@ package jsc
 
 import (
 	"github.com/iancoleman/strcase"
+	"github.com/syntax-framework/shtml/cmn"
 	"github.com/syntax-framework/shtml/sht"
 	"strings"
 )
 
-var errorCompJsRefInvalidName = sht.Err(
+var errorCompJsRefInvalidName = cmn.Err(
 	"component:js:ref:name",
 	"The reference name is invalid.", "Variable: %s", "Element: %s", "Component: %s",
 )
 
-var errorCompJsRefDuplicated = sht.Err(
+var errorCompJsRefDuplicated = cmn.Err(
 	"component:js:ref:duplicated",
 	"There are two elements with the same JS reference.", "First: %s", "Second: %s",
 )
@@ -23,7 +24,7 @@ type JsNodeReference struct {
 }
 
 // ParseReferences handles references made available to JS (<element ref="myJsVariable">)
-func ParseReferences(node *sht.Node, t *sht.Compiler) ([]*JsNodeReference, error) {
+func ParseReferences(node *sht.Node) ([]*JsNodeReference, error) {
 	// references to elements within the template
 	refVarNodes := map[string]*sht.Node{}
 
@@ -32,7 +33,7 @@ func ParseReferences(node *sht.Node, t *sht.Compiler) ([]*JsNodeReference, error
 	var err error
 
 	// Parse content
-	t.Transverse(node, func(child *sht.Node) (stop bool) {
+	node.Transverse(func(child *sht.Node) (stop bool) {
 		stop = false
 		if child == node || child.Type != sht.ElementNode {
 			return

@@ -372,7 +372,6 @@ func WalkScoped(v IVisitorScoped, n js.INode, stack *WalkScopeStack) {
 		stack.Push(&WalkScope{
 			replace: func(node js.INode, by js.INode) bool {
 				if byExpr, isExpr := by.(js.IExpr); isExpr {
-					println(by.JS())
 					for i, expr := range n.List {
 						if expr == node {
 							n.List[i] = byExpr
