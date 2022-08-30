@@ -2,18 +2,19 @@ package sht
 
 import (
 	"github.com/erinpentecost/byteline"
+	"github.com/syntax-framework/shtml/cmn"
 	"golang.org/x/net/html"
 	"io"
 	"strings"
 )
 
 // Multiple directives [{0}{1}, {2}{3}] asking for {4} on: {5}
-var errorParseTokenizer = Err(
+var errorParseTokenizer = cmn.Err(
 	"parse.tokenizer",
 	"An unexpected error occurred while tokenizing the html.", "Line: %d", "Column: %d", "Caused by: %s",
 )
 
-var errorParseEndTag = Err(
+var errorParseEndTag = cmn.Err(
 	"parse.endingTag",
 	"Mismatched ending tag.", "Expected: %d", "Found: %d", "Line: %d", "Column: %d",
 )

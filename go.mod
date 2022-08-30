@@ -10,6 +10,9 @@ require (
 	golang.org/x/net v0.0.0-20220708220712-1185a9018129
 )
 
-require github.com/tdewolff/parse/v2 v2.6.1
+require (
+	github.com/tdewolff/parse/v2 v2.6.1
+	github.com/tdewolff/test v1.0.7
+)
 
 replace github.com/tdewolff/parse/v2 v2.6.1 => /Users/arodin/dev/projects/ndx/tdewolff-js-parse

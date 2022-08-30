@@ -232,8 +232,15 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, sequenceGlobal *sht.Seq
 	}
 	contextAstScope := &contextJsAst.BlockStmt.Scope
 
+	for _, jsVar := range contextAstScope.Declared {
+		contextVariables.Add(jsVar)
+	}
+
 	// Parse all exports, change by varibles
 	export, exportDefault := parseExportApi(contextJsAst)
+
+	// push varibles modification to watchers
+	AddDispatcers(contextJsAst, contextAstScope, contextVariables, nil)
 
 	// @TODO: fork the project https://github.com/tdewolff/parse/tree/master/js and add feature to keep original formatting
 	jsSource = contextJsAst.JS()
@@ -382,7 +389,8 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, sequenceGlobal *sht.Seq
 	}
 
 	// START - Instance Function
-	bjs.WriteString("\n    i : function ($) {\n")
+	// @TODO: Dependencies like require.js function($, STX, dependency1, dependency2, ...)
+	bjs.WriteString("\n    i : function ($, STX) {\n")
 
 	// initialize references (need to be visible in global scope to be indexed)
 	if len(references) > 0 {

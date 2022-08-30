@@ -95,17 +95,19 @@ func WalkScoped(v IVisitorScoped, n js.INode, stack *WalkScopeStack) {
 	case *js.EmptyStmt:
 		return
 	case *js.ExprStmt:
-		WalkScoped(v, n.Value, stack)
+		walkScopedReplaceIExpr(n.Value, func(expr js.IExpr) { n.Value = expr }, v, stack)
 	case *js.IfStmt:
 		WalkScoped(v, n.Body, stack)
 		WalkScoped(v, n.Else, stack)
 		WalkScoped(v, n.Cond, stack)
 	case *js.DoWhileStmt:
 		WalkScoped(v, n.Body, stack)
-		WalkScoped(v, n.Cond, stack)
+
+		walkScopedReplaceIExpr(n.Cond, func(expr js.IExpr) { n.Cond = expr }, v, stack)
 	case *js.WhileStmt:
 		WalkScoped(v, n.Body, stack)
-		WalkScoped(v, n.Cond, stack)
+
+		walkScopedReplaceIExpr(n.Cond, func(expr js.IExpr) { n.Cond = expr }, v, stack)
 	case *js.ForStmt:
 		if n.Body != nil {
 			stack.Push(&WalkScope{
@@ -123,9 +125,10 @@ func WalkScoped(v IVisitorScoped, n js.INode, stack *WalkScopeStack) {
 			stack.Pop()
 		}
 
-		WalkScoped(v, n.Init, stack)
-		WalkScoped(v, n.Cond, stack)
-		WalkScoped(v, n.Post, stack)
+		walkScopedReplaceIExpr(n.Init, func(expr js.IExpr) { n.Init = expr }, v, stack)
+		walkScopedReplaceIExpr(n.Cond, func(expr js.IExpr) { n.Cond = expr }, v, stack)
+		walkScopedReplaceIExpr(n.Post, func(expr js.IExpr) { n.Post = expr }, v, stack)
+
 	case *js.ForInStmt:
 		if n.Body != nil {
 			stack.Push(&WalkScope{
@@ -143,15 +146,15 @@ func WalkScoped(v IVisitorScoped, n js.INode, stack *WalkScopeStack) {
 			stack.Pop()
 		}
 
-		WalkScoped(v, n.Init, stack)
-		WalkScoped(v, n.Value, stack)
+		walkScopedReplaceIExpr(n.Init, func(expr js.IExpr) { n.Init = expr }, v, stack)
+		walkScopedReplaceIExpr(n.Value, func(expr js.IExpr) { n.Value = expr }, v, stack)
 	case *js.ForOfStmt:
 		if n.Body != nil {
 			WalkScoped(v, n.Body, stack)
 		}
 
-		WalkScoped(v, n.Init, stack)
-		WalkScoped(v, n.Value, stack)
+		walkScopedReplaceIExpr(n.Init, func(expr js.IExpr) { n.Init = expr }, v, stack)
+		walkScopedReplaceIExpr(n.Value, func(expr js.IExpr) { n.Value = expr }, v, stack)
 	case *js.CaseClause:
 		if n.List != nil {
 			for i := 0; i < len(n.List); i++ {
@@ -159,7 +162,7 @@ func WalkScoped(v IVisitorScoped, n js.INode, stack *WalkScopeStack) {
 			}
 		}
 
-		WalkScoped(v, n.Cond, stack)
+		walkScopedReplaceIExpr(n.Cond, func(expr js.IExpr) { n.Cond = expr }, v, stack)
 	case *js.SwitchStmt:
 		if n.List != nil {
 			for i := 0; i < len(n.List); i++ {
@@ -167,18 +170,18 @@ func WalkScoped(v IVisitorScoped, n js.INode, stack *WalkScopeStack) {
 			}
 		}
 
-		WalkScoped(v, n.Init, stack)
+		walkScopedReplaceIExpr(n.Init, func(expr js.IExpr) { n.Init = expr }, v, stack)
 	case *js.BranchStmt:
 		return
 	case *js.ReturnStmt:
-		WalkScoped(v, n.Value, stack)
+		walkScopedReplaceIExpr(n.Value, func(expr js.IExpr) { n.Value = expr }, v, stack)
 	case *js.WithStmt:
 		WalkScoped(v, n.Body, stack)
-		WalkScoped(v, n.Cond, stack)
+		walkScopedReplaceIExpr(n.Cond, func(expr js.IExpr) { n.Cond = expr }, v, stack)
 	case *js.LabelledStmt:
 		WalkScoped(v, n.Value, stack)
 	case *js.ThrowStmt:
-		WalkScoped(v, n.Value, stack)
+		walkScopedReplaceIExpr(n.Value, func(expr js.IExpr) { n.Value = expr }, v, stack)
 	case *js.TryStmt:
 		if n.Body != nil {
 			WalkScoped(v, n.Body, stack)
@@ -210,12 +213,12 @@ func WalkScoped(v IVisitorScoped, n js.INode, stack *WalkScopeStack) {
 			}
 		}
 
-		WalkScoped(v, n.Decl, stack)
+		walkScopedReplaceIExpr(n.Decl, func(expr js.IExpr) { n.Decl = expr }, v, stack)
 	case *js.DirectivePrologueStmt:
 		return
 	case *js.PropertyName:
 		WalkScoped(v, &n.Literal, stack)
-		WalkScoped(v, n.Computed, stack)
+		walkScopedReplaceIExpr(n.Computed, func(expr js.IExpr) { n.Computed = expr }, v, stack)
 	case *js.BindingArray:
 		if n.List != nil {
 			for i := 0; i < len(n.List); i++ {
@@ -242,7 +245,7 @@ func WalkScoped(v IVisitorScoped, n js.INode, stack *WalkScopeStack) {
 		}
 	case *js.BindingElement:
 		WalkScoped(v, n.Binding, stack)
-		WalkScoped(v, n.Default, stack)
+		walkScopedReplaceIExpr(n.Default, func(expr js.IExpr) { n.Default = expr }, v, stack)
 	case *js.VarDecl:
 		if n.List != nil {
 			for i := 0; i < len(n.List); i++ {
@@ -270,13 +273,13 @@ func WalkScoped(v IVisitorScoped, n js.INode, stack *WalkScopeStack) {
 		WalkScoped(v, &n.Name, stack)
 	case *js.Field:
 		WalkScoped(v, &n.Name, stack)
-		WalkScoped(v, n.Init, stack)
+		walkScopedReplaceIExpr(n.Init, func(expr js.IExpr) { n.Init = expr }, v, stack)
 	case *js.ClassDecl:
 		if n.Name != nil {
 			WalkScoped(v, n.Name, stack)
 		}
 
-		WalkScoped(v, n.Extends, stack)
+		walkScopedReplaceIExpr(n.Extends, func(expr js.IExpr) { n.Extends = expr }, v, stack)
 
 		for _, item := range n.List {
 			if item.StaticBlock != nil {
@@ -290,7 +293,7 @@ func WalkScoped(v IVisitorScoped, n js.INode, stack *WalkScopeStack) {
 	case *js.LiteralExpr:
 		return
 	case *js.Element:
-		WalkScoped(v, n.Value, stack)
+		walkScopedReplaceIExpr(n.Value, func(expr js.IExpr) { n.Value = expr }, v, stack)
 	case *js.ArrayExpr:
 		if n.List != nil {
 			for i := 0; i < len(n.List); i++ {
@@ -302,8 +305,8 @@ func WalkScoped(v IVisitorScoped, n js.INode, stack *WalkScopeStack) {
 			WalkScoped(v, n.Name, stack)
 		}
 
-		WalkScoped(v, n.Value, stack)
-		WalkScoped(v, n.Init, stack)
+		walkScopedReplaceIExpr(n.Value, func(expr js.IExpr) { n.Value = expr }, v, stack)
+		walkScopedReplaceIExpr(n.Init, func(expr js.IExpr) { n.Init = expr }, v, stack)
 	case *js.ObjectExpr:
 		if n.List != nil {
 			for i := 0; i < len(n.List); i++ {
@@ -311,7 +314,7 @@ func WalkScoped(v IVisitorScoped, n js.INode, stack *WalkScopeStack) {
 			}
 		}
 	case *js.TemplatePart:
-		WalkScoped(v, n.Expr, stack)
+		walkScopedReplaceIExpr(n.Expr, func(expr js.IExpr) { n.Expr = expr }, v, stack)
 	case *js.TemplateExpr:
 		if n.List != nil {
 			for i := 0; i < len(n.List); i++ {
@@ -319,21 +322,21 @@ func WalkScoped(v IVisitorScoped, n js.INode, stack *WalkScopeStack) {
 			}
 		}
 
-		WalkScoped(v, n.Tag, stack)
+		walkScopedReplaceIExpr(n.Tag, func(expr js.IExpr) { n.Tag = expr }, v, stack)
 	case *js.GroupExpr:
-		WalkScoped(v, n.X, stack)
+		walkScopedReplaceIExpr(n.X, func(expr js.IExpr) { n.X = expr }, v, stack)
 	case *js.IndexExpr:
-		WalkScoped(v, n.X, stack)
-		WalkScoped(v, n.Y, stack)
+		walkScopedReplaceIExpr(n.X, func(expr js.IExpr) { n.X = expr }, v, stack)
+		walkScopedReplaceIExpr(n.Y, func(expr js.IExpr) { n.Y = expr }, v, stack)
 	case *js.DotExpr:
-		WalkScoped(v, n.X, stack)
+		walkScopedReplaceIExpr(n.X, func(expr js.IExpr) { n.X = expr }, v, stack)
 		WalkScoped(v, &n.Y, stack)
 	case *js.NewTargetExpr:
 		return
 	case *js.ImportMetaExpr:
 		return
 	case *js.Arg:
-		WalkScoped(v, n.Value, stack)
+		walkScopedReplaceIExpr(n.Value, func(expr js.IExpr) { n.Value = expr }, v, stack)
 	case *js.Args:
 		if n.List != nil {
 			for i := 0; i < len(n.List); i++ {
@@ -345,62 +348,43 @@ func WalkScoped(v IVisitorScoped, n js.INode, stack *WalkScopeStack) {
 			WalkScoped(v, n.Args, stack)
 		}
 
-		WalkScoped(v, n.X, stack)
+		walkScopedReplaceIExpr(n.X, func(expr js.IExpr) { n.X = expr }, v, stack)
 	case *js.CallExpr:
 		WalkScoped(v, &n.Args, stack)
-		WalkScoped(v, n.X, stack)
+		walkScopedReplaceIExpr(n.X, func(expr js.IExpr) { n.X = expr }, v, stack)
 	case *js.UnaryExpr:
-		WalkScoped(v, n.X, stack)
+		walkScopedReplaceIExpr(n.X, func(expr js.IExpr) { n.X = expr }, v, stack)
 	case *js.BinaryExpr:
-		stack.Push(&WalkScope{replace: canRplaceIExprFn(n.X, func(expr js.IExpr) { n.X = expr })})
-		WalkScoped(v, n.X, stack)
-		stack.Pop()
-
-		stack.Push(&WalkScope{replace: canRplaceIExprFn(n.Y, func(expr js.IExpr) { n.Y = expr })})
-		WalkScoped(v, n.Y, stack)
-		stack.Pop()
+		walkScopedReplaceIExpr(n.X, func(expr js.IExpr) { n.X = expr }, v, stack)
+		walkScopedReplaceIExpr(n.Y, func(expr js.IExpr) { n.Y = expr }, v, stack)
 	case *js.CondExpr:
-		WalkScoped(v, n.Cond, stack)
-		WalkScoped(v, n.X, stack)
-		WalkScoped(v, n.Y, stack)
+		walkScopedReplaceIExpr(n.Cond, func(expr js.IExpr) { n.Cond = expr }, v, stack)
+		walkScopedReplaceIExpr(n.X, func(expr js.IExpr) { n.X = expr }, v, stack)
+		walkScopedReplaceIExpr(n.Y, func(expr js.IExpr) { n.Y = expr }, v, stack)
 	case *js.YieldExpr:
-		WalkScoped(v, n.X, stack)
+		walkScopedReplaceIExpr(n.X, func(expr js.IExpr) { n.X = expr }, v, stack)
 	case *js.ArrowFunc:
 		WalkScoped(v, &n.Body, stack)
 		WalkScoped(v, &n.Params, stack)
 	case *js.CommaExpr:
-		stack.Push(&WalkScope{
-			replace: func(node js.INode, by js.INode) bool {
-				if byExpr, isExpr := by.(js.IExpr); isExpr {
-					for i, expr := range n.List {
-						if expr == node {
-							n.List[i] = byExpr
-							return true
-						}
-					}
-				}
-				return false
-			},
-		})
-		for _, item := range n.List {
-			WalkScoped(v, item, stack)
+		for i, item := range n.List {
+			walkScopedReplaceIExpr(item, func(expr js.IExpr) { n.List[i] = expr }, v, stack)
 		}
-		stack.Pop()
 	default:
 		return
 	}
 }
 
-func canRplaceIExpr(actual js.IExpr, find js.INode, replaceBy js.INode, replace func(expr js.IExpr)) bool {
-	if converted, isSameType := replaceBy.(js.IExpr); actual == find && isSameType {
-		replace(converted)
-		return true
-	}
-	return false
-}
-
-func canRplaceIExprFn(actual js.IExpr, replace func(expr js.IExpr)) func(node js.INode, by js.INode) bool {
-	return func(node js.INode, by js.INode) bool {
-		return canRplaceIExpr(actual, node, by, replace)
-	}
+func walkScopedReplaceIExpr(actual js.IExpr, replaceFn func(expr js.IExpr), v IVisitorScoped, stack *WalkScopeStack) {
+	stack.Push(&WalkScope{
+		replace: func(find js.INode, replaceBy js.INode) bool {
+			if converted, isSameType := replaceBy.(js.IExpr); actual == find && isSameType {
+				replaceFn(converted)
+				return true
+			}
+			return false
+		},
+	})
+	WalkScoped(v, actual, stack)
+	stack.Pop()
 }

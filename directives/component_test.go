@@ -169,11 +169,12 @@ func Test_Todo_List(t *testing.T) {
       <form onsubmit="handleSubmit()" class="xpto ${inputValue ? 'sujo' : 'limpo'}">
         <label for="listItem">List Item: </label>
         <input id="listItem" value="${inputValue}" onchange="inputValue = e.target.value"/>
+        <p>Name: ${inputValue}</p>
       </form>
     
       <p>Todo List:</p>
       <ul>
-        <li each="item in todoList">{item}</li>
+        <li each="item in todoList">${item}</li>
       </ul>
     
       <script>

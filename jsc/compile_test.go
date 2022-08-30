@@ -32,7 +32,7 @@ func Test_Must_Return_Component_Lifecycle(t *testing.T) {
       return {
         f: _$file,
         l: _$line,
-        i : function ($) {
+        i : function ($, STX) {
     
           // Component
           const variable = () => { }; 
@@ -99,7 +99,7 @@ func Test_Exports(t *testing.T) {
       return {
         f: _$file,
         l: _$line,
-        i : function ($) {
+        i : function ($, STX) {
     
           // Component
           const variable = () => { }; 
@@ -152,7 +152,7 @@ func Test_Export_Default_Function(t *testing.T) {
       return {
         f: _$file,
         l: _$line,
-        i : function ($) {
+        i : function ($, STX) {
           const variable = () => { }; 
           return {
             z : function(){ return { variable: variable} }
@@ -190,7 +190,7 @@ func Test_Export_Default_Object(t *testing.T) {
       return {
         f: _$file,
         l: _$line,
-        i : function ($) {
+        i : function ($, STX) {
     
           // Component
           const variable = () => { }; 
@@ -232,7 +232,7 @@ func Test_Export_Default_Variable(t *testing.T) {
       return {
         f: _$file,
         l: _$line,
-        i : function ($) {
+        i : function ($, STX) {
     
           // Component
           const variable = () => { }; 
@@ -244,6 +244,107 @@ func Test_Export_Default_Variable(t *testing.T) {
         }
       }
     })
+  `
+
+	testCompileJs(t, template, expected, nil)
+}
+
+func Test_Assignments(t *testing.T) {
+
+	template := `
+    <div>
+      <div></div>
+      <script>
+        let value = 1;
+
+        // Unary Assignment
+        const fn1 = () => { value++ }
+        const fn2 = () => { value-- }
+        const fn3 = () => { ++value }
+        const fn4 = () => { --value }
+        const fn5 = () => { --value + value++ }
+
+        // Binary Assignment
+        const fnA = () => { value    = 25; } // =    Assignment
+        const fnB = () => { value   += 25; } // +=   Addition assignment
+        const fnC = () => { value   *= 25; } // *=   Multiplication assignment
+        const fnD = () => { value   /= 25; } // /=   Division assignment
+        const fnE = () => { value   -= 25; } // -=   Subtraction assignment
+        const fnF = () => { value   %= 25; } // %=   Remainder assignment
+        const fnG = () => { value  **= 25; } // **=  Exponentiation assignment (ECMAScript 2016)
+        const fnH = () => { value  <<= 25; } // <<=  Left shift assignment
+        const fnI = () => { value  >>= 25; } // >>=  Right shift assignment
+        const fnJ = () => { value >>>= 25; } // >>>= Unsigned right shift assignment
+        const fnK = () => { value   &= 25; } // &=   Bitwise AND assignment
+        const fnL = () => { value   ^= 25; } // ^=   Bitwise XOR assignment
+        const fnM = () => { value   |= 25; } // |=   Bitwise OR assignment
+        const fnN = () => { value  &&= 25; } // &&=  Logical AND assignment
+        const fnO = () => { value  ||= 25; } // ||=  Logical OR assignment
+        const fnP = () => { value  ??= 25; } // ??=  Logical nullish assignment
+
+        // call
+        myFunctionCall(value++)
+        myFunctionCall(++value)
+        value = myFunctionCall(value++)
+
+        const fnx = () => {
+          myFunctionCall(value++)
+          myFunctionCall(++value)
+          value = myFunctionCall(value++)
+        }
+      </script>
+    </div>
+  `
+
+	expected := `
+    STX.s('#BQZjdgQ1bZI', function (STX) {
+      const _$line = 3;
+      const _$file = "template.html";
+      return {
+        f: _$file, 
+        l: _$line, 
+        i: function ($, STX) {
+          let value = 1;
+
+          // Unary Assignment
+          const fn1 = () => { $.i(0, value, (value++, value)); };
+          const fn2 = () => { $.i(0, value, (value--, value)); };
+          const fn3 = () => { $.i(0, value, ++value); };
+          const fn4 = () => { $.i(0, value, --value); };
+          const fn5 = () => { $.i(0, value, --value) + $.i(0, value, (value++, value)); };
+
+          // Binary Assignment
+          const fnA = () => {    $.i(0, value, value = 25); }; // =    Assignment
+          const fnB = () => {   $.i(0, value, value += 25); }; // +=   Addition assignment
+          const fnC = () => {   $.i(0, value, value *= 25); }; // *=   Multiplication assignment
+          const fnD = () => {   $.i(0, value, value /= 25); }; // /=   Division assignment
+          const fnE = () => {   $.i(0, value, value -= 25); }; // -=   Subtraction assignment
+          const fnF = () => {   $.i(0, value, value %= 25); }; // %=   Remainder assignment
+          const fnG = () => {  $.i(0, value, value **= 25); }; // **=  Exponentiation assignment (ECMAScript 2016)
+          const fnH = () => {  $.i(0, value, value <<= 25); }; // <<=  Left shift assignment
+          const fnI = () => {  $.i(0, value, value >>= 25); }; // >>=  Right shift assignment
+          const fnJ = () => { $.i(0, value, value >>>= 25); }; // >>>= Unsigned right shift assignment
+          const fnK = () => {   $.i(0, value, value &= 25); }; // &=   Bitwise AND assignment
+          const fnL = () => {   $.i(0, value, value ^= 25); }; // ^=   Bitwise XOR assignment
+          const fnM = () => {   $.i(0, value, value |= 25); }; // |=   Bitwise OR assignment
+          const fnN = () => {  $.i(0, value, value &&= 25); }; // &&=  Logical AND assignment
+          const fnO = () => {  $.i(0, value, value ||= 25); }; // ||=  Logical OR assignment
+          const fnP = () => {  $.i(0, value, value ??= 25); }; // ??=  Logical nullish assignment
+
+          // call
+          myFunctionCall($.i(0, value, (value++, value)));
+          myFunctionCall($.i(0, value, ++value));
+          $.i(0, value, value = myFunctionCall($.i(0, value, (value++, value))));
+
+          const fnx = () => {
+            myFunctionCall($.i(0, value, (value++, value)));
+            myFunctionCall($.i(0, value, ++value));
+            $.i(0, value, value = myFunctionCall($.i(0, value, (value++, value))));
+          };
+          return {};
+        }
+      };
+    });
   `
 
 	testCompileJs(t, template, expected, nil)

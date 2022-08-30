@@ -114,6 +114,7 @@ func Interpolate(text string) (*Compiled, error) {
 
 	content := &bytes.Buffer{}
 
+	prevChar := ' '
 	reader := strings.NewReader(text)
 	for {
 		currChar, _, err := reader.ReadRune()
@@ -138,7 +139,7 @@ func Interpolate(text string) (*Compiled, error) {
 		}
 
 		if !inExpression {
-			if currChar == '{' || (currChar == '!' && nextChar == '{') {
+			if (currChar == '{' && (prevChar != '$' && prevChar != '#')) || (currChar == '!' && nextChar == '{') {
 				// {value} or !{value}
 				compiled.static = append(compiled.static, content.String())
 
@@ -183,6 +184,8 @@ func Interpolate(text string) (*Compiled, error) {
 				content.WriteRune(currChar)
 			}
 		}
+
+		prevChar = currChar
 
 		//prev = currChar
 	}

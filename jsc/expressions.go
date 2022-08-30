@@ -5,6 +5,7 @@ import (
 	"github.com/syntax-framework/shtml/sht"
 	"github.com/tdewolff/parse/v2"
 	"github.com/tdewolff/parse/v2/js"
+	"golang.org/x/net/html/atom"
 	"log"
 	"strconv"
 	"strings"
@@ -95,8 +96,6 @@ func (p *ExpressionsParser) Parse() error {
 	return err
 }
 
-// AddDispatcers(interpolationJsAst, contextAstScope, contextVariables, nil)
-
 // parseAttributeEvent handles the html events defined in an element
 func (p *ExpressionsParser) parseAttributeEvent(child *sht.Node, attr *sht.Attribute) error {
 	//contextAst := p.ContextAst
@@ -142,6 +141,7 @@ func (p *ExpressionsParser) parseAttributeEvent(child *sht.Node, attr *sht.Attri
 				if isDeclared, _ := IsDeclaredOnScope(jsVar, contextAstScope); isDeclared {
 					// is a custom javascript function or "client-param-name"
 					// Ex. <button onclick="onClick()">
+					// AddDispatcers(interpolationJsAst, contextAstScope, contextVariables, nil)
 					eventJsCode = "(e) => { " + callExpr.JS() + " }"
 				} else {
 					// considers it to be a remote eventIdx call (push)
@@ -154,6 +154,7 @@ func (p *ExpressionsParser) parseAttributeEvent(child *sht.Node, attr *sht.Attri
 						// <button onclick="increment(count, time, e.MouseX)">
 
 					}
+					// AddDispatcers(interpolationJsAst, contextAstScope, contextVariables, nil)
 					eventJsCode = "(e) => { push('" + eventName + "', e, " + eventPayload + ") }"
 				}
 			} else {
@@ -173,11 +174,14 @@ func (p *ExpressionsParser) parseAttributeEvent(child *sht.Node, attr *sht.Attri
 			}
 		case *js.ArrowFunc:
 			// <element onclick="(e) => doSomething">
+			// AddDispatcers(interpolationJsAst, contextAstScope, contextVariables, nil)
 			eventJsCode = exprStmt.Value.(*js.ArrowFunc).JS()
 		case *js.FuncDecl:
 			// <element onclick="function xpto(e){ doSomething() }">
+			// AddDispatcers(interpolationJsAst, contextAstScope, contextVariables, nil)
 			eventJsCode = "(e) => { (" + exprStmt.Value.(*js.FuncDecl).JS() + ")() }"
 		default:
+			// AddDispatcers(interpolationJsAst, contextAstScope, contextVariables, nil)
 			eventJsCode = "(e) => { " + eventJsCode + " }"
 		}
 	}
@@ -190,6 +194,9 @@ func (p *ExpressionsParser) parseAttributeEvent(child *sht.Node, attr *sht.Attri
 		// JS: Array<[elementIndex, eventNameIndex, expressionIndex]>
 		"[ " + elementIndex + ", " + eventNameIndex + ", " + expressionIndex + " ]",
 	)
+
+	// remove html event
+	child.Attributes.Remove(attr)
 
 	return nil
 }
@@ -280,7 +287,7 @@ func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute)
 						//    2.2) Cannot be "function" or "arrow function"
 						if isSingleRef, jsVar := IsContextSingleLetOrVarReference(interpolationJsAst, contextAst); isSingleRef {
 							// add event handler
-							variableIndex := strconv.Itoa(contextVariables.Add(jsVar))
+							variableIndex := strconv.Itoa(contextVariables.GetIndex(jsVar))
 							expressionIndex := strconv.Itoa(expressions.Add(
 								"(e) => { $.c(" + variableIndex + ", " + elementIndex + ", e); }",
 							))
@@ -342,7 +349,7 @@ func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute)
 			js.Walk(VisitorEnterFunc(func(node js.INode) bool {
 				if jsVar, isVar := node.(*js.Var); isVar {
 					if isDeclared, jsVarContext := IsDeclaredOnScope(jsVar, contextAstScope); isDeclared {
-						variableIndex := strconv.Itoa(contextVariables.Add(jsVarContext))
+						variableIndex := strconv.Itoa(contextVariables.GetIndex(jsVarContext))
 						// JS: Array<key: _, value: [type, variableIndex, writerIndex]>
 						//    type 1 = schedule(writerIndex)
 						watchers.Add(
@@ -373,7 +380,7 @@ func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute)
 			js.Walk(VisitorEnterFunc(func(node js.INode) bool {
 				if jsVar, isVar := node.(*js.Var); isVar {
 					if isDeclared, jsVarContext := IsDeclaredOnScope(jsVar, contextAstScope); isDeclared {
-						variableIndex := strconv.Itoa(contextVariables.Add(jsVarContext))
+						variableIndex := strconv.Itoa(contextVariables.GetIndex(jsVarContext))
 						// JS: Array<key: _, value: [type, variableIndex, writerIndex]>
 						//    type 1 = schedule(writerIndex)
 						watchers.Add(
@@ -416,11 +423,40 @@ func (p *ExpressionsParser) parseTextNode(child *sht.Node) error {
 		return nil
 	}
 
+	nodeParent := child.Parent
+
 	var err error
 	for elementId, interpolation := range interpolations {
 
+		parts := strings.Split(innerText, elementId)
+
+		// pre text
+		nodeParent.AppendChild(&sht.Node{
+			Type:   sht.TextNode,
+			Data:   parts[0],
+			File:   child.File,
+			Line:   child.Line,
+			Column: child.Column,
+		})
+
 		// replace biding location by <embed hidden class="_xxx">
-		innerText = strings.Replace(innerText, elementId, `<embed hidden class="`+elementId+`">`, 1)
+		// https://html.spec.whatwg.org/#the-embed-element
+		anchor := &sht.Node{
+			Type:       sht.ElementNode,
+			Data:       "embed",
+			DataAtom:   atom.S,
+			File:       child.File,
+			Line:       child.Line,
+			Column:     child.Column,
+			Attributes: &sht.Attributes{Map: map[string]*sht.Attribute{}},
+		}
+		anchor.Attributes.Set("hidden", "hidden")
+		anchor.Attributes.Set("id", elementId)
+		nodeParent.AppendChild(anchor)
+
+		innerText = parts[1]
+
+		//innerText = strings.Replace(innerText, elementId, `<embed hidden class="`+elementId+`">`, 1)
 
 		// eventJsCode = "(e) => { " + eventJsCode + " }"
 		interpolationJs := interpolation.Expression
@@ -460,7 +496,7 @@ func (p *ExpressionsParser) parseTextNode(child *sht.Node) error {
 		// identical expressions are reused throughout the code
 		expressionIndex := strconv.Itoa(expressions.Add("() => { return " + interpolationJs + "; }"))
 
-		elementIndex := strconv.Itoa(elements.Add(elementId))
+		elementIndex := strconv.Itoa(elements.Add("#" + elementId))
 
 		// Apply the result of an expression to an element (innerHtml)
 		// JS: Array<key: writerIndex, value: [elementIndex, expressionIndex]>
@@ -472,7 +508,7 @@ func (p *ExpressionsParser) parseTextNode(child *sht.Node) error {
 		js.Walk(VisitorEnterFunc(func(node js.INode) bool {
 			if jsVar, isVar := node.(*js.Var); isVar {
 				if isDeclared, jsVarContext := IsDeclaredOnScope(jsVar, contextAstScope); isDeclared {
-					variableIndex := strconv.Itoa(contextVariables.Add(jsVarContext))
+					variableIndex := strconv.Itoa(contextVariables.GetIndex(jsVarContext))
 					// JS: Array<key: _, value: [type, variableIndex, writerIndex]>
 					//    type 1 = schedule(writerIndex)
 					watchers.Add(
@@ -484,7 +520,16 @@ func (p *ExpressionsParser) parseTextNode(child *sht.Node) error {
 		}), interpolationJsAst)
 	}
 
-	child.Data = innerText
+	// post text
+	nodeParent.AppendChild(&sht.Node{
+		Type:   sht.TextNode,
+		Data:   innerText,
+		File:   child.File,
+		Line:   child.Line,
+		Column: child.Column,
+	})
+
+	child.Remove()
 
 	return err
 }

@@ -3,7 +3,9 @@ package directives
 import (
 	"github.com/syntax-framework/shtml/jsc"
 	"github.com/syntax-framework/shtml/sht"
+	"log"
 	"path"
+	"strconv"
 	"strings"
 )
 
@@ -17,6 +19,17 @@ var Script = &sht.Directive{
 	Compile: func(node *sht.Node, attrs *sht.Attributes, t *sht.Compiler) (*sht.DirectiveMethods, error) {
 
 		var assets []string
+
+		priorityStr := attrs.Get("priority")
+		priority := 0
+		if priorityStr != "" {
+			var errAtoi error
+			priority, errAtoi = strconv.Atoi(priorityStr)
+			if errAtoi != nil {
+				// warning
+				log.Print("Warn: invalid priority value in " + node.DebugTag() + ", msg:" + errAtoi.Error())
+			}
+		}
 
 		if src := node.Attributes.Get("src"); src != "" {
 			// external src ("//" = Protocol-relative URL)
@@ -38,12 +51,17 @@ var Script = &sht.Directive{
 					asset.ReferrerPolicy = value
 				}
 
+				asset.Priority = priority
+
 				assets = append(assets, asset.Name)
 			} else {
 				asset, err := t.RegisterAssetJsFilepath(path.Join(path.Dir(node.File), src))
 				if err != nil {
 					return nil, err
 				}
+
+				asset.Priority = priority
+
 				assets = append(assets, asset.Name)
 			}
 		} else {
@@ -52,7 +70,9 @@ var Script = &sht.Directive{
 				return nil, inlineJsErr
 			}
 			if inlineJs != nil {
-				assets = append(assets, t.RegisterAssetJsContent(inlineJs.Content).Name)
+				asset := t.RegisterAssetJsContent(inlineJs.Content)
+				asset.Priority = priority
+				assets = append(assets, asset.Name)
 			}
 		}
 

@@ -59,18 +59,6 @@ func (s *TemplateSystem) RegisterAsset(asset *cmn.Asset) {
 		s.Assets = map[*cmn.Asset]bool{}
 	}
 
-	if asset.Content != nil && len(asset.Content) > 0 {
-		asset.Size = int64(len(asset.Content))
-
-		if asset.Integrity == "" {
-			asset.Integrity = "sha512-" + HashSha512Base64(asset.Content)
-		}
-
-		if asset.Etag == "" {
-			asset.Etag = HashXXH64(asset.Content)
-		}
-	}
-
 	if strings.HasSuffix(asset.Name, ".js") {
 		asset.Name = asset.Name[:len(asset.Name)-3]
 	} else if strings.HasSuffix(asset.Name, ".css") {
@@ -90,6 +78,19 @@ func (s *TemplateSystem) RegisterAsset(asset *cmn.Asset) {
 			asset.Name = name + "-" + HashXXH64([]byte(asset.Name))
 		}
 	}
+
+	if asset.Content != nil && len(asset.Content) > 0 {
+		asset.Size = int64(len(asset.Content))
+
+		if asset.Integrity == "" {
+			asset.Integrity = "sha512-" + HashSha512Base64(asset.Content)
+		}
+
+		if asset.Etag == "" {
+			asset.Etag = HashXXH64(asset.Content)
+		}
+	}
+
 	s.Assets[asset] = true
 }
 

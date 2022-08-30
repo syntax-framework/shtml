@@ -198,14 +198,27 @@ func (n *Node) toXhtml() *html.Node {
 		o.Type = html.RawNode
 	}
 
-	attributes := make([]html.Attribute, len(n.AttrList))
-	for i, attr := range n.AttrList {
-		attributes[i] = html.Attribute{
-			Key:       attr.Name,
-			Val:       attr.Value,
-			Namespace: attr.Namespace,
+	attributes := []html.Attribute{}
+	//if n.AttrList != nil {
+	//	for _, attr := range n.AttrList {
+	//		attributes = append(attributes, html.Attribute{
+	//			Key:       attr.Name,
+	//			Val:       attr.Value,
+	//			Namespace: attr.Namespace,
+	//		})
+	//	}
+	//}
+
+	if n.Attributes != nil && n.Attributes.Map != nil {
+		for _, attr := range n.Attributes.Map {
+			attributes = append(attributes, html.Attribute{
+				Key:       attr.Name,
+				Val:       attr.Value,
+				Namespace: attr.Namespace,
+			})
 		}
 	}
+
 	o.Attr = attributes
 
 	if n.FirstChild != nil {

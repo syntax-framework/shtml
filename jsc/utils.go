@@ -84,7 +84,7 @@ func IsDeclaredOnScope(expr *js.Var, scope *js.Scope) (bool, *js.Var) {
 	return false, nil
 }
 
-func AddDispatcers(ast js.INode, globalScope *js.Scope, globaUsedVars *cmn.IndexedSet, stack *WalkScopeStack) {
+func AddDispatcers(ast js.INode, globalScope *js.Scope, contextVariables *cmn.IndexedSet, stack *WalkScopeStack) {
 	// fast check
 	if hasSideEffect, _ := HasSideEffect(ast, nil); hasSideEffect {
 		WalkScoped(IVisitorScopedFunc(func(node js.INode, stack *WalkScopeStack) bool {
@@ -103,6 +103,7 @@ func AddDispatcers(ast js.INode, globalScope *js.Scope, globaUsedVars *cmn.Index
 				}
 				jsExpr = unaryExpr
 				if unaryExpr.Op == js.PostIncrToken || unaryExpr.Op == js.PostDecrToken {
+					// a++, a--
 					valueChangeBeforeReturn = false
 				}
 			case *js.BinaryExpr:
@@ -119,12 +120,12 @@ func AddDispatcers(ast js.INode, globalScope *js.Scope, globaUsedVars *cmn.Index
 			if jsVar != nil {
 				if isDeclared, jsVarGlobal := IsDeclaredOnScope(jsVar, globalScope); isDeclared {
 					// mark jsExpr to dispatch
-					varIndex := globaUsedVars.Add(jsVarGlobal)
+					varIndex := contextVariables.GetIndex(jsVarGlobal)
 					if valueChangeBeforeReturn {
 						// [5, 6, 6] = (value, ++value, value)
 						// [5, 6, 6] = (value, value = value + 1, value)
 						// _$i(index, variable, Expression)
-						stack.Replace(node, CallExpr("_$i", IntegerExpr(varIndex), jsVar, jsExpr))
+						stack.Replace(node, CallExpr("$.i", IntegerExpr(varIndex), jsVar, jsExpr))
 						if rightAssignmentExpression != nil {
 							newStack := &WalkScopeStack{}
 							newStack.Push(&WalkScope{
@@ -139,7 +140,7 @@ func AddDispatcers(ast js.INode, globalScope *js.Scope, globaUsedVars *cmn.Index
 								},
 							})
 							// process Expression
-							AddDispatcers(rightAssignmentExpression, globalScope, globaUsedVars, newStack)
+							AddDispatcers(rightAssignmentExpression, globalScope, contextVariables, newStack)
 							newStack.Pop()
 
 							// dont process child again
@@ -148,7 +149,7 @@ func AddDispatcers(ast js.INode, globalScope *js.Scope, globaUsedVars *cmn.Index
 					} else {
 						// [5, 5, 6] = (value, value++, value)
 						// _$i(index, variable, (Expression, variable))
-						stack.Replace(node, CallExpr("_$i", IntegerExpr(varIndex), jsVar, GroupCommaExpr(jsExpr, jsVar)))
+						stack.Replace(node, CallExpr("$.i", IntegerExpr(varIndex), jsVar, GroupCommaExpr(jsExpr, jsVar)))
 					}
 				}
 			}
