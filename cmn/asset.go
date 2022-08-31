@@ -24,9 +24,11 @@ type Asset struct {
 	Integrity      string // https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity
 	CrossOrigin    string
 	ReferrerPolicy string
-	Filepath       string   // When the asset is a file in the file system
-	Dependencies   []*Asset // Dependencies of the asset (imports on js)
-	Priority       int      // Developer can set an asset loading priority
+	Filepath       string            // When the asset is a file in the file system
+	Dependencies   []*Asset          // Dependencies of the asset (imports on js)
+	Priority       int               // Developer can set an asset loading priority
+	Uses           uint16            // Usado no processo de Tree Shaking. Permite que as dependencias não usadas sejam descartadas
+	Attributes     map[string]string // Allow to render custom data-attributes on tag
 }
 
 // Assets utility to resolve dependencies between resources
