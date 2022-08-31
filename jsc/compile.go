@@ -390,7 +390,7 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, sequenceGlobal *sht.Seq
 
 	// START - Instance Function
 	// @TODO: Dependencies like require.js function($, STX, dependency1, dependency2, ...)
-	bjs.WriteString("\n    i : function ($, STX) {\n")
+	bjs.WriteString("\n    c : function ($, STX) {\n")
 
 	// initialize references (need to be visible in global scope to be indexed)
 	if len(references) > 0 {

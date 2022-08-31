@@ -29,8 +29,8 @@ var ClientLifeCycleMap = map[string]string{
 	"OnDestroy":    "f", // `() => void` Before unmount
 	"OnConnect":    "g", // `() => void` Invoked when the component has connected/reconnected to the server
 	"OnDisconnect": "h", // `() => void` Executed when the component is disconnected from the server
-	"OnError":      "i", // `(err: any) => void` Error handler method that executes when child scope errors
-	"OnEvent":      "j", // `(event) => bool`
+	"OnEvent":      "i", // `(event) => bool`
+	"OnError":      "j", // `(trace: string, err: any) => void` Error handler method that executes when child scope errors
 }
 
 // ClientInvalidParamsAndRefs reserved variable names, cannot be used in parameters or references.

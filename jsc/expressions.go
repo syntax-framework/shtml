@@ -288,8 +288,17 @@ func (p *ExpressionsParser) parseAttribute(child *sht.Node, attr *sht.Attribute)
 						if isSingleRef, jsVar := IsContextSingleLetOrVarReference(interpolationJsAst, contextAst); isSingleRef {
 							// add event handler
 							variableIndex := strconv.Itoa(contextVariables.GetIndex(jsVar))
+
+							varName := jsVar.String()
+							setterExpressionIndex := strconv.Itoa(expressions.Add(
+								// Setter expression - Change value
+								// (_$val) => { $.i(variableIndex, variable, variable = _$val) }
+								"(_$val) => { $.i(" + variableIndex + ", " + varName + ", " + varName + " = _$val) }",
+							))
+
 							expressionIndex := strconv.Itoa(expressions.Add(
-								"(e) => { $.c(" + variableIndex + ", " + elementIndex + ", e); }",
+								// e) => { $.c(e, setterExpressionId) },
+								"(e) => { $.c( e , " + setterExpressionIndex + ") }",
 							))
 							// JS: Array<[elementIndex, eventNameIndex, expressionIndex]>
 							events.Add(
