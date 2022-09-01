@@ -109,18 +109,20 @@ func (c *Compiler) RegisterAsset(asset *cmn.Asset) {
 // RegisterAssetJsURL registers an external javascript being used by this template
 func (c *Compiler) RegisterAssetJsURL(src string) (*cmn.Asset, error) {
 	asset, err := c.System.RegisterAssetJsURL(src)
-	if err == nil {
-		c.RegisterAsset(asset)
+	if err != nil {
+		return nil, err
 	}
+	c.RegisterAsset(asset)
 	return asset, nil
 }
 
 // RegisterAssetJsFilepath register an existing javascript in the filesystem being used by this template
 func (c *Compiler) RegisterAssetJsFilepath(filepath string) (*cmn.Asset, error) {
 	asset, err := c.System.RegisterAssetJsFilepath(filepath)
-	if err == nil {
-		c.RegisterAsset(asset)
+	if err != nil {
+		return nil, err
 	}
+	c.RegisterAsset(asset)
 	return asset, nil
 }
 

@@ -11,8 +11,6 @@ require (
 )
 
 require (
-	github.com/tdewolff/parse/v2 v2.6.1
+	github.com/tdewolff/parse/v2 v2.6.3
 	github.com/tdewolff/test v1.0.7
 )
-
-replace github.com/tdewolff/parse/v2 v2.6.1 => /Users/arodin/dev/projects/ndx/tdewolff-js-parse
