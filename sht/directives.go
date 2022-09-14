@@ -1,6 +1,7 @@
 package sht
 
 import (
+	"github.com/syntax-framework/shtml/cmn"
 	"log"
 	"sort"
 )
@@ -21,7 +22,7 @@ func (l DirectivesByPriority) Less(i, j int) bool {
 }
 func (l DirectivesByPriority) Swap(i, j int) { l[i], l[j] = l[j], l[i] }
 
-// Directives agrupa a lista de directivas registradas
+// Directives group the list of registered directives
 type Directives struct {
 	parent *Directives
 	list   []*Directive
@@ -62,18 +63,26 @@ func (d *Directives) NewChild() *Directives {
 	return &Directives{parent: d}
 }
 
+var errorAttrInterpolation = cmn.Err(
+	"attr.interpolation",
+	"Error while interpolating an attribute.", "AttrName: %s", "AttrValue: %s", "Element: %s", "Cause: %s",
+)
+
 // collect Looks for directives on the given node and adds them to the directive collection which is sorted.
-func (d *Directives) collect(node *Node, attrs *Attributes) []*Directive {
+func (d *Directives) collect(node *Node, attrs *Attributes, ignore *Directive) ([]*Directive, error) {
 
 	ddMap := map[*Directive]bool{}
 
 	// use the node name: <directive>
-	d.collectInto(ddMap, NormalizeName(node.Data), ELEMENT)
+	d.collectInto(ddMap, NormalizeName(node.Data), ELEMENT, ignore)
 
 	// iterate over the Map
 	for _, attr := range attrs.Map {
-		addAttrInterpolateDirective(ddMap, attr.Value, attr.Name)
-		d.collectInto(ddMap, attr.Name, ATTRIBUTE)
+		err := addAttrInterpolateDirective(ddMap, attr.Value, attr.Name)
+		if err != nil {
+			return nil, errorAttrInterpolation(attr.Name, attr.Value, node.DebugTag(), err.Error())
+		}
+		d.collectInto(ddMap, attr.Name, ATTRIBUTE, ignore)
 	}
 	//addTextInterpolateDirective(ddMap, node.Data)
 
@@ -84,37 +93,36 @@ func (d *Directives) collect(node *Node, attrs *Attributes) []*Directive {
 
 	sort.Sort(directives)
 
-	return directives
+	return directives, nil
 }
 
-func (d *Directives) collectInto(ddMap map[*Directive]bool, name string, location DirectiveRestrict) {
-	definitions, existsByName := d.byName[name]
-	if existsByName {
-		for _, definition := range definitions {
-			if definition.Restrict&location != 0 {
-				ddMap[definition] = true
+func (d *Directives) collectInto(ddMap map[*Directive]bool, name string, location DirectiveRestrict, ignore *Directive) {
+	if directives, exist := d.byName[name]; exist {
+		for _, directive := range directives {
+			if directive.Restrict&location != 0 && directive != ignore {
+				ddMap[directive] = true
 			}
 		}
 	}
 	if d.parent != nil {
-		d.parent.collectInto(ddMap, name, location)
+		d.parent.collectInto(ddMap, name, location, ignore)
 	}
 }
 
-func addAttrInterpolateDirective(directives map[*Directive]bool, value string, name string) {
+func addAttrInterpolateDirective(directives map[*Directive]bool, value string, name string) error {
 	interpolateFn, err := Interpolate(value)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	// no interpolation found -> ignore
 	if interpolateFn == nil {
-		return
+		return nil
 	}
 
 	directive := Directive{
 		Name:     "AttrInterpolateDirective",
-		Priority: 100,
+		Priority: 300,
 		Process: func(s *Scope, attr *Attributes, transclude TranscludeFunc) *Rendered {
 
 			// If the attribute has changed since last Interpolate()
@@ -151,4 +159,5 @@ func addAttrInterpolateDirective(directives map[*Directive]bool, value string, n
 		},
 	}
 	directives[&directive] = true
+	return nil
 }

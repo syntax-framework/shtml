@@ -477,6 +477,11 @@ func Compile(nodeParent *sht.Node, nodeScript *sht.Node, sequenceGlobal *sht.Seq
 		//ComponentParams: ClientParams,
 	}
 
+	if nodeScript != nil {
+		// remove script from render
+		nodeScript.Remove()
+	}
+
 	return jsCode, nil
 }
 

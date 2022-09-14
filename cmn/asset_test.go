@@ -79,8 +79,8 @@ func Test_Assets_Graph_Circular_Dependencies(t *testing.T) {
 				t.Errorf("graph.Resolve() | expect to receive error")
 			} else {
 				errStr := err.Error()
-				if !strings.HasPrefix(errStr, "[graph.circulardep]") {
-					t.Errorf("graph.Resolve() | invalid error\n expected: [graph.circulardep] .......\n   actual: %s", errStr)
+				if !strings.HasPrefix(errStr, "[asset.graph.circulardep]") {
+					t.Errorf("graph.Resolve() | invalid error\n expected: [asset.graph.circulardep] .......\n   actual: %s", errStr)
 				}
 			}
 		})

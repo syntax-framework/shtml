@@ -40,7 +40,7 @@ var Component = &sht.Directive{
 	Priority:   1000,
 	Terminal:   true,
 	Transclude: true,
-	Compile: func(node *sht.Node, attrs *sht.Attributes, t *sht.Compiler) (methods *sht.DirectiveMethods, err error) {
+	Compile: func(node *sht.Node, attrs *sht.Attributes, t *sht.Compiler) (methods *sht.DirectiveMethods, einlineJsErrr error) {
 
 		// @TODO: Parse include?
 
@@ -56,16 +56,16 @@ var Component = &sht.Directive{
 			switch child.Data {
 			case "component":
 				// It is not allowed for a component to be defined inside another
-				err = errorCompNested(node.DebugTag(), child.DebugTag())
+				einlineJsErrr = errorCompNested(node.DebugTag(), child.DebugTag())
 
 			case "style":
 				if style != nil {
 					// a component can only have a single style tag
-					err = errorCompStyleSingle(style.DebugTag(), child.DebugTag())
+					einlineJsErrr = errorCompStyleSingle(style.DebugTag(), child.DebugTag())
 
 				} else if child.Parent != node {
 					// when it has style, it must be an immediate child of the component
-					err = errorCompStyleLocation(node.DebugTag(), child.DebugTag())
+					einlineJsErrr = errorCompStyleLocation(node.DebugTag(), child.DebugTag())
 
 				} else {
 					style = child
@@ -74,18 +74,18 @@ var Component = &sht.Directive{
 			case "script":
 				if script != nil {
 					// a component can only have a single script tag
-					err = errorCompScriptSingle(script.DebugTag(), child.DebugTag())
+					einlineJsErrr = errorCompScriptSingle(script.DebugTag(), child.DebugTag())
 
 				} else if child.Parent != node {
 					// when it has script, it must be an immediate child of the component
-					err = errorCompScriptLocation(node.DebugTag(), child.DebugTag())
+					einlineJsErrr = errorCompScriptLocation(node.DebugTag(), child.DebugTag())
 
 				} else {
 					script = child
 				}
 			}
 
-			if err != nil {
+			if einlineJsErrr != nil {
 				stop = true
 				return
 			}
@@ -93,7 +93,7 @@ var Component = &sht.Directive{
 			return
 		})
 
-		if err != nil {
+		if einlineJsErrr != nil {
 			return
 		}
 
@@ -107,8 +107,13 @@ var Component = &sht.Directive{
 		//	}
 		//}
 
-		assetJavascript, err := jsc.Compile(node, script, t.Sequence)
-		println(assetJavascript)
+		inlineJs, inlineJsErr := jsc.Compile(node, script, t.Sequence)
+		if inlineJsErr != nil {
+			return nil, inlineJsErr
+		}
+		if inlineJs != nil {
+			t.RegisterAssetJsContent(inlineJs.Content)
+		}
 
 		// @TODO: Registrar o componente no contexto de compilação
 		//t.RegisterComponent(&sht.Component{

@@ -2,6 +2,7 @@ package sht
 
 import (
 	"bytes"
+	"sort"
 	"strings"
 )
 
@@ -124,61 +125,101 @@ func (a *Attributes) RemoveClass(value string) {
 	}
 }
 
+// Render the attributes sorted by name. Boolean attributes (no value) are always rendered at the end
+//  &Rendered{
+//    Static: *[]string{
+//      ` attribute-one="`,
+//      `"  attribute-two="`,
+//      `" class="`,
+//      `" boolean-attr-one boolean-attr-2`,
+//    }
+//    Dynamics: []interface{}{
+//      "value-1",
+//      "value-2"
+//      "class-1 class-",
+//    }
+//}
 func (a *Attributes) Render() *Rendered {
 	if a.Map == nil {
 		return nil
 	}
 
-	//return Rendered{
-	//  Static: *[]string{
-	//    ` class="`,
-	//    `"  atributo-1="`,
-	//    `"  atributo-2="`,
-	//    `"`,
-	//  }
-	//  Dynamics: []interface{}{
-	//    "dentro class-false class-2 class-1",
-	//    "att1-valor",
-	//    "scope-valor"
-	//  }
-	//}
-
 	var static []string
 	var dynamics []interface{}
 
-	staticCurr := &bytes.Buffer{}
-	prevHasValue := false
-
+	// Attributes sorted
+	//  [
+	//    ["attr-one", "value"],
+	//    ["attr-two", "value"],
+	//    ["attr-bool"],
+	//  ]
+	var sortedAttributes [][]string
 	for _, a := range a.Map {
+		attrName := a.Name
+		if a.Namespace != "" {
+			attrName = a.Namespace + ":" + attrName
+		}
+
+		if HtmlBooleanAttributes[attrName] == true {
+			// https://html.spec.whatwg.org/#boolean-attribute
+			if a.Value != "false" {
+				sortedAttributes = append(sortedAttributes, []string{attrName})
+			}
+		} else {
+			if a.Value != "" {
+				// attr-name, value
+				sortedAttributes = append(sortedAttributes, []string{attrName, HtmlEscape(a.Value)})
+			} else {
+				sortedAttributes = append(sortedAttributes, []string{attrName})
+			}
+		}
+	}
+
+	sort.Slice(sortedAttributes, func(i, j int) bool {
+		a := sortedAttributes[i]
+		b := sortedAttributes[j]
+		// boolean attributes at the end
+		if len(b) < len(a) {
+			// a != boolean
+			// b == boolean
+			// a first
+			return true
+		}
+		if len(a) < len(b) {
+			// a == boolean
+			// b != boolean
+			// b first
+			return false
+		}
+
+		return strings.Compare(a[0], b[0]) <= 0
+	})
+
+	prevHasValue := false
+	staticCurr := &bytes.Buffer{}
+	for _, part := range sortedAttributes {
 		if prevHasValue {
 			staticCurr.WriteRune('"')
 		}
 		staticCurr.WriteByte(' ')
-
-		if a.Namespace != "" {
-			staticCurr.WriteString(a.Namespace)
-			staticCurr.WriteByte(':')
-		}
-
-		staticCurr.WriteString(a.Name)
-
-		if a.Value != "" {
+		if len(part) == 2 {
+			// attr-name="value"
 			prevHasValue = true
-			staticCurr.WriteString(`="`)
+			staticCurr.WriteString(part[0] + `="`)
 			static = append(static, staticCurr.String())
 			// reset buffer (next Static)
 			staticCurr = &bytes.Buffer{}
-
-			dynamics = append(dynamics, HtmlEscape(a.Value))
+			dynamics = append(dynamics, part[1])
 		} else {
+			// attr-name
 			prevHasValue = false
+			staticCurr.WriteString(part[0])
 		}
 	}
 
 	if prevHasValue {
 		staticCurr.WriteString(`"`)
 	}
-
 	static = append(static, staticCurr.String())
 
 	// @TODO: Cache processing, if Context hasn't changed since template, keep it
@@ -189,5 +230,7 @@ func (a *Attributes) Render() *Rendered {
 }
 
 func (a *Attributes) Remove(attr *Attribute) {
-	delete(a.Map, attr.Normalized)
+	if attr != nil {
+		delete(a.Map, attr.Normalized)
+	}
 }

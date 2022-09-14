@@ -10,7 +10,7 @@ type TemplateSystem interface {
 	Load(filepath string) (string, error)
 	Compile(filepath string) (*sht.Compiled, *sht.Context, error)
 	NewScope() *sht.Scope
-	Register(directive *sht.Directive)
+	Register(directives ...*sht.Directive)
 }
 
 var globalDirectives = &sht.Directives{}

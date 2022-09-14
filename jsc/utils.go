@@ -33,7 +33,7 @@ func IsBinaryAssignmentOperator(tokenType js.TokenType) bool {
 	return binaryAssignmentOperators[tokenType] == true
 }
 
-func CallExpr(name string, args ...js.IExpr) js.CallExpr {
+func CallExpr(name string, args ...js.IExpr) *js.CallExpr {
 
 	var list []js.Arg
 
@@ -41,7 +41,7 @@ func CallExpr(name string, args ...js.IExpr) js.CallExpr {
 		list = append(list, js.Arg{Value: arg})
 	}
 
-	return js.CallExpr{
+	return &js.CallExpr{
 		X:        &js.Var{Data: []byte(name)},
 		Args:     js.Args{List: list},
 		Optional: false,

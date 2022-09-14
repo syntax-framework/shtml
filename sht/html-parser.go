@@ -70,7 +70,7 @@ func createNode(token html.Token, file string, line int, column int) *Node {
 			}
 		}
 
-		node.AttrList = attrList
+		//node.AttrList = attrList
 		node.Attributes = attributes
 	}
 

@@ -1,6 +1,6 @@
 module github.com/syntax-framework/shtml
 
-go 1.17
+go 1.18
 
 require (
 	github.com/antonmedv/expr v1.9.0
@@ -14,3 +14,5 @@ require (
 	github.com/tdewolff/parse/v2 v2.6.3
 	github.com/tdewolff/test v1.0.7
 )
+
+replace github.com/antonmedv/expr v1.9.0 => github.com/nidorx/expr v0.0.0-20220914144349-346e71e7fbe3

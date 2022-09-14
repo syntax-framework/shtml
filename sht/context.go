@@ -1,14 +1,20 @@
 package sht
 
+import "github.com/syntax-framework/shtml/cmn"
+
 // Context simple framework for accessing the compile and run context.
 //
 // Context can be used by directives to exchange or expose execution information
 type Context struct {
-	Data map[string]interface{}
+	Data   map[string]interface{}
+	Timing *cmn.ServerTiming
 }
 
 func NewContext() *Context {
-	return &Context{Data: map[string]interface{}{}}
+	return &Context{
+		Data:   map[string]interface{}{},
+		Timing: &cmn.ServerTiming{},
+	}
 }
 
 // Get some value from the context

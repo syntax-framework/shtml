@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func Test_Must_Return_Component_Lifecycle(t *testing.T) {
+func Test_must_return_component_lifecycle(t *testing.T) {
 
 	template := `
     <div>
@@ -32,7 +32,7 @@ func Test_Must_Return_Component_Lifecycle(t *testing.T) {
       return {
         f: _$file,
         l: _$line,
-        i : function ($, STX) {
+        c : function ($, STX) {
     
           // Component
           const variable = () => { }; 
@@ -54,8 +54,8 @@ func Test_Must_Return_Component_Lifecycle(t *testing.T) {
             f : OnDestroy,
             g : OnConnect,
             h : OnDisconnect,
-            i : OnError,
-            j : OnEvent
+            j : OnError,
+            i : OnEvent
           };
         }
       }
@@ -65,7 +65,7 @@ func Test_Must_Return_Component_Lifecycle(t *testing.T) {
 	testCompileJs(t, template, expected, nil)
 }
 
-func Test_Exports(t *testing.T) {
+func Test_exports(t *testing.T) {
 
 	template := `
     <div>
@@ -99,7 +99,7 @@ func Test_Exports(t *testing.T) {
       return {
         f: _$file,
         l: _$line,
-        i : function ($, STX) {
+        c : function ($, STX) {
     
           // Component
           const variable = () => { }; 
@@ -132,7 +132,7 @@ func Test_Exports(t *testing.T) {
 	testCompileJs(t, template, expected, nil)
 }
 
-func Test_Export_Default_Function(t *testing.T) {
+func Test_export_default_function(t *testing.T) {
 
 	template := `
     <div>
@@ -152,7 +152,7 @@ func Test_Export_Default_Function(t *testing.T) {
       return {
         f: _$file,
         l: _$line,
-        i : function ($, STX) {
+        c : function ($, STX) {
           const variable = () => { }; 
           return {
             z : function(){ return { variable: variable} }
@@ -165,7 +165,7 @@ func Test_Export_Default_Function(t *testing.T) {
 	testCompileJs(t, template, expected, nil)
 }
 
-func Test_Export_Default_Object(t *testing.T) {
+func Test_export_default_object(t *testing.T) {
 
 	template := `
     <div>
@@ -190,7 +190,7 @@ func Test_Export_Default_Object(t *testing.T) {
       return {
         f: _$file,
         l: _$line,
-        i : function ($, STX) {
+        c : function ($, STX) {
     
           // Component
           const variable = () => { }; 
@@ -210,7 +210,7 @@ func Test_Export_Default_Object(t *testing.T) {
 	testCompileJs(t, template, expected, nil)
 }
 
-func Test_Export_Default_Variable(t *testing.T) {
+func Test_export_default_variable(t *testing.T) {
 
 	template := `
     <div>
@@ -232,7 +232,7 @@ func Test_Export_Default_Variable(t *testing.T) {
       return {
         f: _$file,
         l: _$line,
-        i : function ($, STX) {
+        c : function ($, STX) {
     
           // Component
           const variable = () => { }; 
@@ -249,7 +249,7 @@ func Test_Export_Default_Variable(t *testing.T) {
 	testCompileJs(t, template, expected, nil)
 }
 
-func Test_Assignments(t *testing.T) {
+func Test_assignments(t *testing.T) {
 
 	template := `
     <div>
@@ -303,7 +303,7 @@ func Test_Assignments(t *testing.T) {
       return {
         f: _$file, 
         l: _$line, 
-        i: function ($, STX) {
+        c: function ($, STX) {
           let value = 1;
 
           // Unary Assignment

@@ -14,8 +14,10 @@ type TemplateSystem struct {
 }
 
 // Register a global directive
-func (s *TemplateSystem) Register(directive *Directive) {
-	s.Directives.Add(directive)
+func (s *TemplateSystem) Register(directives ...*Directive) {
+	for _, directive := range directives {
+		s.Directives.Add(directive)
+	}
 }
 
 // Load load an html file

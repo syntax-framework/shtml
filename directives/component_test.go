@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func Test_Component_Should_Not_Allow_Nested_Components(t *testing.T) {
+func Test_component_should_not_allow_nested_components(t *testing.T) {
 	template := `
     <component name="out">
       <div>
@@ -19,7 +19,7 @@ func Test_Component_Should_Not_Allow_Nested_Components(t *testing.T) {
 }
 
 // a component can only have a single style tag
-func Test_Component_Should_Not_Allow_Multiple_Style_Element(t *testing.T) {
+func Test_component_should_not_allow_multiple_style_element(t *testing.T) {
 	template := `
     <component name="test">
       <style>.my-class {color: #FFF}</style>
@@ -30,7 +30,7 @@ func Test_Component_Should_Not_Allow_Multiple_Style_Element(t *testing.T) {
 }
 
 // a component can only have a single script tag
-func Test_Component_Should_Not_Allow_Multiple_Script_Element(t *testing.T) {
+func Test_component_should_not_allow_multiple_script_element(t *testing.T) {
 	template := `
     <component name="test">
       <script>console.log("hello")</script>
@@ -41,7 +41,7 @@ func Test_Component_Should_Not_Allow_Multiple_Script_Element(t *testing.T) {
 }
 
 // when it has style, it must be an immediate child of the component
-func Test_Component_Style_Element_Must_Be_Immediate_Child(t *testing.T) {
+func Test_component_style_element_must_be_immediate_child(t *testing.T) {
 	template := `
     <component name="test">
       <div><style>.my-class-2 {color: #FFF}</style></div>
@@ -51,7 +51,7 @@ func Test_Component_Style_Element_Must_Be_Immediate_Child(t *testing.T) {
 }
 
 // when it has script, it must be an immediate child of the component
-func Test_Component_Script_Element_Must_Be_Immediate_Child(t *testing.T) {
+func Test_component_script_element_must_be_immediate_child(t *testing.T) {
 	template := `
     <component name="test">
       <div><script>console.log("world!")</script></div>
@@ -61,17 +61,17 @@ func Test_Component_Script_Element_Must_Be_Immediate_Child(t *testing.T) {
 }
 
 // client-param is referencing a non-existent parameter
-func Test_Component_JS_Param_Invalid_Reference(t *testing.T) {
+func Test_component_js_param_invalid_reference(t *testing.T) {
 	template := `
     <component name="test" param-server-name="string" client-param-name="@server-name-wrong">
       <div></div>
     </component>
   `
-	testForErrorCode(t, template, "component:param:js:ref")
+	testForErrorCode(t, template, "component.param.client.ref.notfound")
 }
 
 // client-param is referencing a non-existent parameter
-func Test_Two_Way_Data_Binding(t *testing.T) {
+func Test_two_way_data_binding(t *testing.T) {
 	template := `
     <component name="test">
       <input type="text" value="${varx}" />
@@ -122,17 +122,20 @@ func Test_Two_Way_Data_Binding(t *testing.T) {
 }
 
 // Expressions with Side Effect in text interpolation block are not allowed.
-func Test_Should_Not_Allow_Side_Effect_in_Interpolation(t *testing.T) {
-	var tests = []string{
-		`<component name="c"> <span>${ a = --a + 1, b }</span> <script>let a = 0; let b = '';</script></component>`,
-		`<component name="c"> <span>${ a++, b }</span> <script>let a = 0; let b = '';</script></component>`,
-		`<component name="c"> <span>${ ++a, b }</span> <script>let a = 0; let b = '';</script></component>`,
-		`<component name="c"> <span>${ a--, b }</span> <script>let a = 0; let b = '';</script></component>`,
-		`<component name="c"> <span>${ --a, b }</span> <script>let a = 0; let b = '';</script></component>`,
-		`<component name="c"> <span>${ a = a + 1, b }</span> <script>let a = 0; let b = '';</script></component>`,
-		`<component name="c"> <span>${ a = --a + a++, b }</span> <script>let a = 0; let b = '';</script></component>`,
-		`<component name="c"> <span class="${ a = --a + a++, b }">text</span> <script>let a = 0; let b = '';</script></component>`,
-		`<component name="c"> 
+func Test_should_not_allow_side_effect_in_interpolation(t *testing.T) {
+	var tests = []struct {
+		name  string
+		input string
+	}{
+		{"1", `<component name="c"> <span>${ a = --a + 1, b }</span> <script>let a = 0; let b = '';</script></component>`},
+		{"2", `<component name="c"> <span>${ a++, b }</span> <script>let a = 0; let b = '';</script></component>`},
+		{"3", `<component name="c"> <span>${ ++a, b }</span> <script>let a = 0; let b = '';</script></component>`},
+		{"4", `<component name="c"> <span>${ a--, b }</span> <script>let a = 0; let b = '';</script></component>`},
+		{"5", `<component name="c"> <span>${ --a, b }</span> <script>let a = 0; let b = '';</script></component>`},
+		{"6", `<component name="c"> <span>${ a = a + 1, b }</span> <script>let a = 0; let b = '';</script></component>`},
+		{"7", `<component name="c"> <span>${ a = --a + a++, b }</span> <script>let a = 0; let b = '';</script></component>`},
+		{"8", `<component name="c"> <span class="${ a = --a + a++, b }">text</span> <script>let a = 0; let b = '';</script></component>`},
+		{"9", `<component name="c"> 
       <span>${sideEffectFn()}</span> 
       <script>
         let a = 0; 
@@ -141,8 +144,8 @@ func Test_Should_Not_Allow_Side_Effect_in_Interpolation(t *testing.T) {
           return a = --a + a++, b 
         }
       </script>
-    </component>`,
-		`<component name="c"> 
+    </component>`},
+		{"10", `<component name="c"> 
       <span>${myFn()}</span> 
       <script>
         let a = 0; 
@@ -156,203 +159,12 @@ func Test_Should_Not_Allow_Side_Effect_in_Interpolation(t *testing.T) {
           return sideEffectFn()
         }
       </script>
-    </component>`,
+    </component>`},
 	}
 	for _, tt := range tests {
-		testForErrorCode(t, tt, "js:interpolation:sideeffect")
+		t.Run(tt.name, func(t *testing.T) {
+			testForErrorCode(t, tt.input, "js:interpolation:sideeffect")
+		})
+
 	}
-}
-
-func Test_Todo_List(t *testing.T) {
-	template := `
-    <component name="todo">
-      <form onsubmit="handleSubmit()" class="xpto ${inputValue ? 'sujo' : 'limpo'}">
-        <label for="listItem">List Item: </label>
-        <input id="listItem" value="${inputValue}" onchange="inputValue = e.target.value"/>
-        <p>Name: ${inputValue}</p>
-      </form>
-    
-      <p>Todo List:</p>
-      <ul>
-        <li each="item in todoList">${item}</li>
-      </ul>
-    
-      <script>
-        let inputValue = ''
-        let todoList = [];
-    
-        const handleSubmit = (e) => {
-          e.preventDefault()
-          todoList = [...todoList, inputValue]
-          inputValue = ''
-        }
-      </script>
-    </component>
-  `
-	testForErrorCode(t, template, "component:param:js:ref")
-}
-
-func Test_Component(t *testing.T) {
-
-	template := `
-    <component
-      name="clock"
-      element="div"
-    
-      param-xxx="string"
-      param-other-value="?map"
-    
-      client-param-callback="string"
-      client-param-variavel="string"
-      client-param-xxx="@other-value"
-    
-      todo="@TODO: Parametros que deverão ser suportados no futuro"
-      controller="RegisteredController"
-    >
-      <!-- Custom variables -->
-      <button onclick="onClick()"></button>
-      <button onclick="callback"></button>
-
-      <!-- Server push -->
-      <button ref="buttonWithOnClick" onclick="increment"></button>
-      <button onclick="increment(count, time, e.MouseX)"></button>    
-      <button onclick="push('increment', count, time, e.MouseX)" data-ref="mySpan"></button>
-
-      <!-- JS ignored -->
-      <button onclick="doSomeThing && doOtherThing"></button>
-      <button onclick="doSomeThing && push('increment', count, time, e.MouseX)"></button>
-
-      <!-- Full content -->
-      <button ref="buttonWithManyEvents" onclick="(e) => doSomeThing" onmousedown="increment(count, time, e.MouseX)">
-        ${count} #{time}  ${x + y}
-      </button>
-      <button onclick="function xpto(e) { doSomeThing(e) }"></button>
-    
-      ${count} #{time}
-
-      <span ref="mySpan2">${ renders = --renders + 1, name }</span>
-	    <span>${ renders++, name }</span>
-	    <span>${ ++renders, name }</span>
-	    <span>${ renders--, name }</span>
-	    <span>${ --renders, name }</span>
-	    <span>${ renders = renders + 1, name }</span>
-	    <span>${ renders = --renders + renders++, name }</span>
-    
-      <style>
-        span {
-          font-family: Roboto
-        }
-      </style>
-    
-      <script>
-        let renders = 0;
-        let name = 'alex';
-
-        // https://www.w3schools.com/js/js_assignment.asp
-        let x = 33, y = 25;
-        x = y;
-        x = y;
-        x += y;
-        x = x + y;
-        x -= y;
-        x = x - y;
-        x *= y;
-        x = x * y;
-        x /= y;
-        x = x / y;
-        x %= y;
-        x = x % y;
-        x <<= y;
-        x = x << y;
-        x >>= y;
-        x = x >> y;
-        x >>>= y;
-        x = x >>> y;
-        x &= y;
-        x = x & y;
-        x ^= y;
-        x = x ^ y;
-        x |= y;
-        x = x | y;
-        x **= y;
-        x = x ** y;
-        x = (()=>{return x ** y})();
-        x = 33 == true ? 25 : 88;
-    
-        /**
-         * Esse é um comentário que deve ser ignorado
-         */
-        let count = 0;
-    
-        console.log("eita porra"); // deve ser ignorado
-    
-        let time = new Date()
-        var xpto;
-    
-        "use strict"
-    
-        function mariaGabriela() {
-          xpto = undefined;
-        }
-    
-        // eita diabo
-    
-        maria = 33
-    
-        const interval = setInterval(() => {
-          count++;
-          time = new Date();
-          mySpan.innerText = time.toString()
-        }, 1000)
-    
-        const onClick = () => {
-          alert(variavel)
-        }
-    
-        const api = {
-          GetTime: () => {
-            return time
-          }
-        }
-    
-        const onDestroy = () => clearInterval(interval)
-      </script>
-    </component>
-    
-    <component name="dois">
-      <clock
-        ref="clockRef"
-        callback="fazAlgumaCoisa()"
-      />
-      <script>
-        const fazAlgumaCoisa = () => {
-          console.log(clockRef.GetTime())
-        }
-      </script>
-    </component>
-    
-    <dois/>
-`
-
-	values := map[string]interface{}{
-		"valueTrue":  true,
-		"valueFalse": false,
-	}
-
-	expected := `
-    <div>
-      A
-      
-      
-      D
-      
-      F
-      G
-        G.1
-        
-      
-      
-    </div>`
-
-	sht.TestTemplate(t, template, values, expected, testGDs)
 }

@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+// @TODO: Transform to serializable structure to allow binary build. https://stackoverflow.com/a/19763256/2204014
+
 // Compiled structure representing a Compiled template
 type Compiled struct {
 	Assets      []*cmn.Asset // Reference to all resources that can be used by this compiled

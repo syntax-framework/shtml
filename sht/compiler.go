@@ -29,6 +29,7 @@ type _PrevContext struct {
 	//newIsolateScopeDirective      string
 	//templateDirective             string
 	MaxPriority int
+	Ignore      map[*Node]*Directive // Quando está fazendo transclude do elemento, ignora o reprocessamtno da mesma directiva
 }
 
 // syntaxDynamicIndexStr used to mark dynamic content locations in html
@@ -62,30 +63,12 @@ func (c *Compiler) NextHash() string {
 	return c.Sequence.NextHash()
 }
 
-// ExtractRoot remove o node do root atual e retorna um novo root para os filhos do node atual
-func (c *Compiler) ExtractRoot(node *Node) *Node {
-
-	parent := &Node{Type: DocumentNode}
-
-	parent.FirstChild = node.FirstChild
-	parent.LastChild = node.LastChild
-
-	for n := node.FirstChild; n != nil; n = n.NextSibling {
-		n.Parent = parent
-	}
-
-	node.FirstChild = nil
-	node.LastChild = nil
-
-	// remove referencias para filhos
-	return parent
-}
-
 // SafeRemove remove o node de forma segura
 func (c *Compiler) SafeRemove(node *Node) {
 	node.Type = TextNode
 	node.Data = ""
-	node.AttrList = []*Attribute{}
+	node.Attributes = &Attributes{Map: map[string]*Attribute{}}
+	//node.AttrList = []*Attribute{}
 	if node.FirstChild != nil {
 		node.FirstChild.Parent = nil
 		node.FirstChild = nil
@@ -156,7 +139,17 @@ func (c *Compiler) processNodes(nodeList []*Node, prevContext *_PrevContext) err
 			var dynamic *DynamicDirectives
 
 			// get the directives that can be applied on that node
-			directives := c.Directives.collect(node, attrs)
+			var toIgnore *Directive
+			if prevContext != nil && prevContext.Ignore != nil && prevContext.Ignore[node] != nil {
+				toIgnore = prevContext.Ignore[node]
+			}
+
+			var directives []*Directive
+
+			if directives, err = c.Directives.collect(node, attrs, toIgnore); err != nil {
+				return err
+			}
+
 			if len(directives) > 0 {
 				dynamic, err = c.compileDirectives(directives, node, attrs, prevContext)
 				if err != nil {
@@ -171,7 +164,8 @@ func (c *Compiler) processNodes(nodeList []*Node, prevContext *_PrevContext) err
 				if dynamic != nil {
 					// replace attributes
 					_, token := c.addDynamic(dynamic)
-					node.AttrList = []*Attribute{{Name: token}}
+					node.Attributes = &Attributes{Map: map[string]*Attribute{token: {Name: token}}}
+					//node.AttrList = []*Attribute{{Name: token}}
 				}
 
 				childNodes := node.GetChildNodes()
@@ -183,23 +177,42 @@ func (c *Compiler) processNodes(nodeList []*Node, prevContext *_PrevContext) err
 				}
 			}
 		} else if node.Type == TextNode {
-			c.compileTextNode(node)
+			if node.Parent != nil {
+				if node.Parent.Data != "script" && node.Parent.Data != "style" {
+					// ignore script and style
+					if err := c.compileTextNode(node); err != nil {
+						return err
+					}
+				}
+			} else {
+				if err := c.compileTextNode(node); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
 }
 
+var errorTextNodeInterpolation = cmn.Err(
+	"textNode.interpolation",
+	"Error while interpolating an text node.", "Element: %s", "Cause: %s",
+)
+
 // compileTextNode verifica se um node do tipo TextNode possui conteúdo dinamico e faz sua compilação
-func (c *Compiler) compileTextNode(node *Node) {
+func (c *Compiler) compileTextNode(node *Node) error {
 	text := node.Data
 	compiled, err := Interpolate(text)
 	if err != nil {
-		log.Fatal(err)
+		if node.Parent != nil {
+			return errorTextNodeInterpolation(node.Parent.DebugTag(), err.Error())
+		}
+		return errorTextNodeInterpolation(node.DebugTag(), err.Error())
 	}
 
 	// no interpolation found -> ignore
 	if compiled == nil {
-		return
+		return nil
 	}
 
 	out := &bytes.Buffer{}
@@ -213,6 +226,7 @@ func (c *Compiler) compileTextNode(node *Node) {
 		}
 	}
 	node.Data = out.String()
+	return nil
 }
 
 // faz a renderização do Node e transforma-o em um Compiled
@@ -275,9 +289,7 @@ func (c *Compiler) extractCompiled(nodeList []*Node) *Compiled {
 // Once the directives have been collected, their compile functions are executed. This method
 // is responsible for inlining directive templates as well as terminating the application
 // of the directives if the terminal directive has been reached.
-func (c *Compiler) compileDirectives(
-	directives []*Directive, node *Node, attrs *Attributes, prevContext *_PrevContext,
-) (*DynamicDirectives, error) {
+func (c *Compiler) compileDirectives(directives []*Directive, node *Node, attrs *Attributes, prevContext *_PrevContext) (*DynamicDirectives, error) {
 
 	terminalPriority := math.MinInt
 
@@ -326,63 +338,45 @@ func (c *Compiler) compileDirectives(
 		}
 
 		transcludeOnThisDirective := false
+		//hasTranscludeDirective = true
 
-		if transclude != nil {
-			//hasTranscludeDirective = true
+		if transclude == nil || transclude == false {
+			// do nothing
 
+		} else if transclude == "element" {
+
+			// see [*DynamicDirectives.createTranscludeFn(scope *Scope, attrs *Attributes)]
+			terminalPriority = directive.Priority
+			contentCompiled, err := c.compileChildNodes(node.ReplaceByText(), prevContext, terminalPriority)
+			if err != nil {
+				return nil, err // @TODO: custom error
+			}
+			dynamic.transclude = true
+			dynamic.transcludeElement = true
+			dynamic.transcludeSlots = map[string]*Compiled{"*": contentCompiled}
+			transcludeOnThisDirective = true
+
+		} else if transclude == true {
+
+			// transclude content
+			contentCompiled, err := c.compileChildNodes(node, prevContext, terminalPriority)
+			if err != nil {
+				return nil, err
+			}
+			if contentCompiled != nil {
+				dynamic.transcludeSlots = map[string]*Compiled{"*": contentCompiled}
+			}
 			dynamic.transclude = true
 			transcludeOnThisDirective = true
 
-			if transclude == "element" {
-				terminalPriority = directive.Priority
+		} else if config, ok := transclude.(map[string]string); ok {
 
-				contentCompiled, err := c.compileNode(node, &_PrevContext{
-					MaxPriority: terminalPriority,
-					// ignoreDirective
-					// transcludeFn
-				})
-				if err != nil {
-					return nil, err // @TODO: custom error
-				}
-				dynamic.transcludeSlots = map[string]*Compiled{"*": contentCompiled}
+			println(config)
+			dynamic.transclude = true
+			transcludeOnThisDirective = true
 
-				// childTranscludeFn = return compile($compileNodes, transcludeFn, MaxPriority, ignoreDirective, previousCompileContext);
-
-			} else {
-				if transclude == true {
-					childNodes := node.GetChildNodes()
-					if childNodes != nil && len(childNodes) > 0 {
-						processNodesErr := c.processNodes(childNodes, prevContext)
-						if processNodesErr != nil {
-							return nil, processNodesErr // @TODO: trace
-						}
-
-						contentCompiled, err := c.compileNode(c.ExtractRoot(node), &_PrevContext{
-							MaxPriority: terminalPriority,
-							// ignoreDirective
-							// transcludeFn
-							// {needsNewScope: directive.$$isolateScope || directive.$$newScope}
-						})
-						if err != nil {
-							return nil, err
-						}
-
-						if contentCompiled.Assets == nil && contentCompiled.dynamics == nil && len(contentCompiled.static) == 1 && contentCompiled.static[0] == "" {
-							// empty content, removed by directives
-							dynamic.transcludeSlots = nil
-						} else {
-							dynamic.transcludeSlots = map[string]*Compiled{"*": contentCompiled}
-						}
-					} else {
-						// empty content, removed by directives
-						dynamic.transcludeSlots = nil
-					}
-				} else if config, ok := transclude.(map[string]string); ok {
-					println(config)
-				} else {
-					log.Fatal("@TODO: Transclude inválido")
-				}
-			}
+		} else {
+			log.Fatal("@TODO: Invalid transclude!")
 		}
 
 		if processFunc != nil {
@@ -413,6 +407,35 @@ func (c *Compiler) compileDirectives(
 	dynamic.process = processInfos
 
 	return dynamic, nil
+}
+
+func (c *Compiler) compileChildNodes(node *Node, prevContext *_PrevContext, terminalPriority int) (*Compiled, error) {
+	childNodes := node.GetChildNodes()
+	if childNodes != nil && len(childNodes) > 0 {
+		// not empty content (not removed by directives)
+		processNodesErr := c.processNodes(childNodes, prevContext)
+		if processNodesErr != nil {
+			return nil, processNodesErr // @TODO: trace
+		}
+
+		contentCompiled, err := c.compileNode(node.ExtractChildren(), &_PrevContext{
+			MaxPriority: terminalPriority,
+			// ignoreDirective
+			// transcludeFn
+			// {needsNewScope: directive.$$isolateScope || directive.$$newScope}
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if contentCompiled.Assets == nil && contentCompiled.dynamics == nil && len(contentCompiled.static) == 1 && contentCompiled.static[0] == "" {
+			// empty content, removed by directives
+			return nil, nil
+		} else {
+			return contentCompiled, nil
+		}
+	}
+	return nil, nil
 }
 
 // addDynamic adiciona um dynamic no contexto de compilação e retorna seu índice e identificador

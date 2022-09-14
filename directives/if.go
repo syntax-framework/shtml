@@ -16,7 +16,7 @@ func createIfDirective(attrs *sht.Attributes, getValue func(attrs *sht.Attribute
 	expression, err := sht.ParseExpression(cond)
 	if err != nil {
 		// @TODO: Remover todos os log.Fatal e simplesmente fazer log de warning
-		log.Fatal(err)
+		log.Fatal("sht.ParseExpression(cond)", err)
 	}
 
 	return &sht.DirectiveMethods{
@@ -65,7 +65,7 @@ func attrIF(attrs *sht.Attributes) string {
 var IFElement = &sht.Directive{
 	Name:       "if",
 	Restrict:   sht.ELEMENT,
-	Priority:   600,
+	Priority:   900,
 	Terminal:   true,
 	Transclude: true,
 	Compile: func(node *sht.Node, attrs *sht.Attributes, t *sht.Compiler) (*sht.DirectiveMethods, error) {
@@ -113,7 +113,7 @@ var IFElement = &sht.Directive{
 var IFAttribute = &sht.Directive{
 	Name:       "if",
 	Restrict:   sht.ATTRIBUTE,
-	Priority:   599,
+	Priority:   899,
 	Terminal:   true,
 	Transclude: "element",
 	Compile: func(node *sht.Node, attrs *sht.Attributes, t *sht.Compiler) (*sht.DirectiveMethods, error) {

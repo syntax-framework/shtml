@@ -1,10 +1,12 @@
 package sht
 
 type Scope struct {
-	Context *Context // allows directives to save context information during execution
-	root    *Scope
-	parent  *Scope
-	data    map[string]interface{}
+	Context   *Context // allows directives to save context information during execution
+	root      *Scope
+	parent    *Scope
+	destroyed bool
+	children  map[*Scope]bool
+	data      map[string]interface{}
 }
 
 func NewRootScope() *Scope {
@@ -16,8 +18,19 @@ func NewRootScope() *Scope {
 	return scope
 }
 
-func (s *Scope) New(algo bool, containingScope *Scope) *Scope {
-	return s
+// New Creates a new child scope
+//
+// The parent scope will propagate change events
+func (s *Scope) New(isolate bool) *Scope {
+	child := &Scope{
+		Context: s.Context,
+		root:    s.root,
+		data:    map[string]interface{}{},
+	}
+	if !isolate {
+		child.parent = s
+	}
+	return child
 }
 
 // Get a value from scope or parent scope
@@ -31,25 +44,28 @@ func (s *Scope) Get(key string) (value interface{}, exists bool) {
 
 // Set a value in scope
 func (s *Scope) Set(key string, value interface{}) {
-	if s.root == s {
-		// fast
-		s.data[key] = value
-		return
+	target := s
+	if target.root != s {
+		found := false
+		for target != nil {
+			if _, exists := target.data[key]; exists {
+				found = true
+				break
+			}
+			target = target.parent
+		}
+		if !found {
+			target = s
+		}
 	}
 
-	found := false
-	ref := s
-	for ref != nil {
-		_, exists := ref.data[key]
-		if exists {
-			found = true
-			ref.data[key] = value
-			break
-		}
-		ref = ref.parent
-	}
-	if !found {
-		s.data[key] = value
+	target.data[key] = value
+}
+
+func (s *Scope) Destroy() {
+	// We can't destroy a scope that has been already destroyed.
+	if s.destroyed {
+		return
 	}
 }
 

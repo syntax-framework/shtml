@@ -43,11 +43,10 @@ type Node struct {
 	DataAtom   atom.Atom
 	Namespace  string
 	Attributes *Attributes
-	AttrList   []*Attribute
-	File       string
-	Line       int
-	Column     int
-	selector   string // unique selector
+	//AttrList   []*Attribute
+	File   string
+	Line   int
+	Column int
 }
 
 // AppendChild adds a node c as a child of n.
@@ -109,6 +108,50 @@ func (n *Node) RemoveChild(c *Node) {
 	c.NextSibling = nil
 }
 
+// ExtractChildren returns a new parent to the children of the current node
+func (n *Node) ExtractChildren() *Node {
+
+	newParent := &Node{Type: DocumentNode}
+
+	newParent.FirstChild = n.FirstChild
+	newParent.LastChild = n.LastChild
+
+	for n := n.FirstChild; n != nil; n = n.NextSibling {
+		n.Parent = newParent
+	}
+
+	n.FirstChild = nil
+	n.LastChild = nil
+
+	// remove referencias para filhos
+	return newParent
+}
+
+// ReplaceByText used for element transclude, replace current element with plain text, extracting all node data to a
+// separate element
+func (n *Node) ReplaceByText() *Node {
+	newNode := n.ExtractChildren()
+
+	newNode.Type = n.Type
+	newNode.Data = n.Data
+	newNode.DataAtom = n.DataAtom
+	newNode.Namespace = n.Namespace
+	newNode.Attributes = n.Attributes
+	//newNode.AttrList = n.AttrList
+	newNode.File = n.File
+	newNode.Line = n.Line
+	newNode.Column = n.Column
+
+	n.Type = TextNode
+	n.Data = " "
+	n.DataAtom = atom.Plaintext
+	n.Namespace = " "
+	n.Attributes = &Attributes{Map: map[string]*Attribute{}}
+	//n.AttrList = []*Attribute{}
+
+	return newNode
+}
+
 // Render renders the parse tree n to string.
 func (n *Node) Render() (string, error) {
 	w := bytes.NewBufferString("")
@@ -148,16 +191,18 @@ func (n *Node) DebugTag() string {
 		// Render the <xxx> opening tag.
 		w.WriteByte('<')
 		w.WriteString(n.Data)
-		for _, a := range n.AttrList {
-			w.WriteByte(' ')
-			if a.Namespace != "" {
-				w.WriteString(a.Namespace)
-				w.WriteByte(':')
+		if n.Attributes != nil && n.Attributes.Map != nil {
+			for _, a := range n.Attributes.Map {
+				w.WriteByte(' ')
+				if a.Namespace != "" {
+					w.WriteString(a.Namespace)
+					w.WriteByte(':')
+				}
+				w.WriteString(a.Name)
+				w.WriteString(`="`)
+				w.WriteString(HtmlEscape(a.Value))
+				w.WriteByte('"')
 			}
-			w.WriteString(a.Name)
-			w.WriteString(`="`)
-			w.WriteString(HtmlEscape(a.Value))
-			w.WriteByte('"')
 		}
 		w.WriteByte('>')
 	}
